@@ -1,0 +1,39 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache
+# Data directories and datasets
+data/
+data/processed/
+*.parquet
+*.jsonl
+
+# Model checkpoints and weight binaries
+models/
+models/atc_classifier/
+models/cima_medical_llama/
+*.bin
+*.safetensors
+*.pt
+*.pth
+*.onnx
+
+# Environment files & virtualenvs
+.env
+.venv
+venv/
+env/
+ENV/
+
+# Testing and linting caches
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# IDE and OS metadata
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
