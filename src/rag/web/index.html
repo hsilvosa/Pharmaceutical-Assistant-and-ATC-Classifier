@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>CIMA Evidence</title>
+  <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="brand-mark" aria-hidden="true">CE</span>
+      <div><strong>CIMA Evidence</strong><span>Documentación oficial AEMPS</span></div>
+    </div>
+    <nav aria-label="Vistas">
+      <button class="tab active" data-tab="search">Consulta</button>
+      <button class="tab" data-tab="evaluation">Evaluación</button>
+    </nav>
+    <div id="health" class="health"><span></span>Comprobando</div>
+  </header>
+
+  <main>
+    <section id="search-view" class="view active">
+      <div class="query-band">
+        <form id="query-form">
+          <label for="question">Pregunta sobre un medicamento</label>
+          <div class="query-row">
+            <textarea id="question" rows="2" maxlength="2000" required
+              placeholder="¿Qué contraindicaciones recoge la ficha técnica de A.A.S. 100 mg?"></textarea>
+            <button id="submit" type="submit">Consultar</button>
+          </div>
+          <div id="medicine-filter" class="selected-filter" hidden></div>
+        </form>
+      </div>
+
+      <div id="empty-state" class="empty-state">
+        <h1>Consulte la evidencia, no una opinión</h1>
+        <p>Las respuestas se limitan a los documentos indexados y enlazan sus secciones oficiales.</p>
+      </div>
+
+      <div id="loading" class="loading" hidden>
+        <div class="loading-line"></div><div class="loading-line short"></div>
+      </div>
+
+      <section id="result" class="result" hidden aria-live="polite">
+        <div class="answer-panel">
+          <div class="answer-heading"><span id="status-label"></span><span id="latency"></span></div>
+          <div id="medicine-context" class="medicine-context" hidden></div>
+          <div id="answer" class="answer"></div>
+        </div>
+        <aside class="sources-panel">
+          <h2>Fuentes</h2>
+          <div id="sources"></div>
+        </aside>
+      </section>
+
+      <section id="disambiguation" class="disambiguation" hidden>
+        <h2>Seleccione el medicamento</h2>
+        <div id="candidates" class="candidate-list"></div>
+      </section>
+    </section>
+
+    <section id="evaluation-view" class="view evaluation" hidden>
+      <div class="evaluation-header">
+        <div><h1>Calidad del sistema</h1><p id="eval-revision">Sin ejecución registrada</p></div>
+        <span id="eval-status" class="eval-status">Pendiente</span>
+      </div>
+      <div id="metrics" class="metrics"></div>
+      <div class="thresholds">
+        <h2>Umbrales de publicación</h2>
+        <div id="threshold-list"></div>
+      </div>
+    </section>
+  </main>
+
+  <footer>Uso informativo y de investigación. No sustituye el consejo de un profesional sanitario.</footer>
+  <script src="/static/app.js"></script>
+</body>
+</html>
+
+

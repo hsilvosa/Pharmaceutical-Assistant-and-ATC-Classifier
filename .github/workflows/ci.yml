@@ -1,0 +1,35 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    env:
+      CIMA_RAG_DEVELOPMENT_MODE: "true"
+      CIMA_RAG_FIXTURE_MODE: "true"
+      CIMA_RAG_INDEX_DIR: indexes/cima
+      CIMA_RAG_BASELINE_PATH: eval/baseline-fixture.json
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Install package
+        run: python -m pip install -e ".[dev]"
+      - name: Lint
+        run: python -m ruff check src/rag tests/test_rag_*.py tests/conftest.py
+      - name: Unit and API tests
+        run: python -m pytest -q tests/test_data.py tests/test_rag_*.py
+      - name: Build fixture index
+        run: |
+          python scripts/create_rag_fixture.py data/rag-fixture
+          python -m src.rag.cli index build --local-data data/rag-fixture --fixture
+      - name: Deterministic evaluation
+        run: python -m src.rag.cli evaluate --benchmark eval/fixture.jsonl --local-data data/rag-fixture --output artifacts/evaluations/ci

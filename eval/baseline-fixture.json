@@ -1,0 +1,19 @@
+{
+  "status": "pass",
+  "source_revision": "local-fixture",
+  "question_count": 4,
+  "metrics": {
+    "recall_at_5": 1.0,
+    "recall_at_10": 1.0,
+    "mrr": 1.0,
+    "ndcg_at_10": 1.0,
+    "answer_f1": 0.9498746867,
+    "citation_precision": 1.0,
+    "citation_recall": 1.0,
+    "citation_coverage": 1.0,
+    "refusal_accuracy": 1.0,
+    "ambiguity_accuracy": 1.0
+  },
+  "note": "Deterministic CI baseline only; it is not a substitute for the pinned full-model evaluation."
+}
+

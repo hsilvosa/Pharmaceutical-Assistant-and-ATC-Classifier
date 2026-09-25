@@ -2,17 +2,17 @@
 Interactive Streamlit Web UI for Spanish Pharmaceutical Assistant & ATC Classifier.
 """
 from src.utils import setup_environment
+
 setup_environment()
 
-import os
 import json
 from pathlib import Path
-import streamlit as st
-import pandas as pd
-import numpy as np
 
+import pandas as pd
+import streamlit as st
+
+from src.config import ATC_LEVEL_1_MAP
 from src.inference import ATCClassifierEngine, CIMAMedicalAssistantEngine
-from src.config import ATC_LEVEL_1_MAP, PROCESSED_DATA_DIR
 
 st.set_page_config(
     page_title="CIMA Pharmaceutical Assistant & ATC Classifier",
@@ -73,6 +73,47 @@ def load_engines():
     qa_eng = CIMAMedicalAssistantEngine()
     return atc_eng, qa_eng
 
+def render_rag_response(response, question: str) -> None:
+    if response.status == "answered":
+        st.markdown(response.answer)
+    elif response.status == "needs_disambiguation":
+        st.info(response.answer)
+        options = {
+            f"{item.name} | {item.presentation or item.registration_number}": item
+            for item in response.candidates
+        }
+        selected_label = st.selectbox("Medicamento", options)
+        if st.button("Consultar esta presentación"):
+            selected = options[selected_label]
+            resolved = qa_engine.query_evidence(
+                question,
+                registration_number=selected.registration_number,
+                language="auto",
+            )
+            render_rag_response(resolved, question)
+        return
+    elif response.status == "refused":
+        st.warning(response.answer)
+    else:
+        st.info(response.answer)
+
+    if response.citations:
+        st.markdown("#### Fuentes oficiales")
+    for citation in response.citations:
+        label = f"{citation.medicine_name} · {citation.title or citation.section}"
+        with st.expander(label):
+            st.write(citation.quote)
+            st.caption(
+                f"Registro {citation.registration_number} · "
+                f"Documento {citation.document_type} · Sección {citation.section}"
+            )
+            st.link_button("Abrir documento oficial AEMPS", citation.url)
+
+    st.caption(
+        f"Fuente {response.source_revision[:12]} · "
+        f"{response.latency_ms.get('total', 0):.0f} ms"
+    )
+
 atc_engine, qa_engine = load_engines()
 
 # Header
@@ -81,55 +122,75 @@ st.markdown('<div class="sub-header">Modelos de IA aplicados al Dataset Oficial 
 
 tabs = st.tabs([
     "💬 Asistente Médico QA & Síntomas",
+    "Evidencia CIMA RAG",
     "🏷️ Clasificador Jerárquico ATC",
     "💊 Buscador de Medicamentos AEMPS",
     "📊 Benchmarks & Métricas"
 ])
 
-# --- TAB 1: Medical QA Assistant & Symptom Recommender ---
+# --- TAB 1: Existing symptom and medication assistant ---
 with tabs[0]:
-    st.markdown("### 💬 Consulta Médica Específica o Síntomas (AEMPS Recommender)")
-    st.write("Describa su problema de salud o síntoma específico (ej: *'no puedo ir al baño'*, *'quemadura en el brazo'*, *'dolor al mear'*, *'dolor de cabeza'*, *'golpe o fractura'*) para recibir una orientación terapéutica con los **principios activos y medicamentos registrados por la AEMPS**.")
-    
-    st.markdown("#### ⚡ Ejemplos rápidos de consulta clínica:")
-    c1, c2, c3 = st.columns(3)
-    with c1:
-        if st.button("🚽 No puedo ir al baño (Estreñimiento)"):
-            st.session_state["user_query"] = "no puedo ir al baño"
-        if st.button("💧 Escozor o dolor al orinar (Cistitis)"):
-            st.session_state["user_query"] = "tengo dolor al mear"
-    with c2:
-        if st.button("🔥 Quemadura en el brazo"):
-            st.session_state["user_query"] = "tengo una quemadura en el brazo"
-        if st.button("🦴 Dolor muscular o por golpe / caida"):
-            st.session_state["user_query"] = "dolor muscular por golpe"
-    with c3:
-        if st.button("🤕 Cefalea / Migraña"):
-            st.session_state["user_query"] = "dolor de cabeza fuerte"
-        if st.button("👁️ Ojo rojo / Conjuntivitis"):
-            st.session_state["user_query"] = "ojo rojo y picores"
+    st.markdown("### Consulta médica específica o síntomas")
+    st.write(
+        "Describa un síntoma o problema de salud para consultar las categorías ATC, "
+        "principios activos y medicamentos registrados en el catálogo CIMA."
+    )
+
+    st.markdown("#### Ejemplos rápidos")
+    examples = [
+        "no puedo ir al baño",
+        "tengo dolor al orinar",
+        "tengo una quemadura en el brazo",
+        "dolor muscular por golpe",
+        "dolor de cabeza fuerte",
+        "ojo rojo y picores",
+    ]
+    columns = st.columns(3)
+    for index, example in enumerate(examples):
+        if columns[index % 3].button(example.capitalize(), key=f"symptom-{index}"):
+            st.session_state["symptom_query"] = example
+
+    symptom_query = st.text_input(
+        "Describa su problema de salud o busque un medicamento:",
+        value=st.session_state.get("symptom_query", ""),
+        key="symptom-query-input",
+    )
+    if st.button("Consultar asistente", type="primary", key="symptom-submit"):
+        if symptom_query:
+            with st.spinner("Consultando el catálogo CIMA..."):
+                response = qa_engine.answer_question(symptom_query)
+                st.markdown(response["answer"])
+        else:
+            st.warning("Introduce una consulta o síntoma.")
+
+# --- TAB 2: Grounded CIMA RAG ---
+with tabs[1]:
+    st.markdown("### Evidencia oficial CIMA")
+    st.caption("Información documental con citas verificables. No ofrece diagnóstico ni tratamiento personal.")
 
     query_input = st.text_input(
-        "Describa su problema de salud o busque un medicamento:",
+        "Pregunta sobre un medicamento:",
         value=st.session_state.get("user_query", ""),
-        placeholder="Ej: Me he quemado la mano | Tengo escozor al orinar | No puedo ir al baño"
+        placeholder="Ej.: ¿Qué contraindicaciones recoge la ficha técnica de este medicamento?"
     )
     
-    if st.button("🔍 Consultar Asistente AEMPS", type="primary"):
+    if st.button("Consultar documentación AEMPS", type="primary"):
         if query_input:
-            with st.spinner("Analizando base de datos AEMPS CIMA..."):
-                response = qa_engine.answer_question(query_input)
-                st.markdown(response["answer"])
-                
-                if response.get("matched_medication"):
-                    med = response["matched_medication"]
-                    with st.expander("📄 Ver Ficha Técnica reducida"):
-                        st.json(med)
+            with st.spinner("Buscando evidencia oficial..."):
+                try:
+                    response = qa_engine.query_evidence(query_input, language="auto")
+                    render_rag_response(response, query_input)
+                except (FileNotFoundError, RuntimeError, ValueError) as exc:
+                    st.error(
+                        "El índice RAG todavía no está disponible. "
+                        "Ejecuta `cima-rag index build` antes de consultar."
+                    )
+                    st.caption(str(exc))
         else:
-            st.warning("Por favor, introduzca una consulta o síntoma.")
+            st.warning("Introduce una pregunta.")
 
-# --- TAB 2: ATC Classifier ---
-with tabs[1]:
+# --- TAB 3: ATC Classifier ---
+with tabs[2]:
     st.markdown("### 🏷️ Clasificación de Taxonomía ATC (Nivel 1-5)")
     st.write("Introduzca la descripción del medicamento, principios activos o fragmento del prospecto para predecir su categoría anatómica y terapéutica ATC.")
     
@@ -163,8 +224,8 @@ with tabs[1]:
         else:
             st.warning("Introduzca texto para clasificar.")
 
-# --- TAB 3: CIMA Medication Explorer ---
-with tabs[2]:
+# --- TAB 4: CIMA Medication Explorer ---
+with tabs[3]:
     st.markdown("### 💊 Buscador de Medicamentos CIMA")
     search_q = st.text_input("Buscar por Nombre, Principio Activo o Código ATC:", value="Fosfomicina")
     
@@ -176,19 +237,34 @@ with tabs[2]:
         else:
             st.info("No se encontraron registros coincidentes.")
 
-# --- TAB 4: Evaluation Benchmarks ---
-with tabs[3]:
-    st.markdown("### 📊 Métricas de Evaluación de los Modelos")
-    
-    m1, m2, m3, m4 = st.columns(4)
-    with m1:
-        st.markdown('<div class="metric-card"><div class="metric-val">94.8%</div><div class="metric-lbl">ATC Top-1 Accuracy</div></div>', unsafe_allow_html=True)
-    with m2:
-        st.markdown('<div class="metric-card"><div class="metric-val">98.6%</div><div class="metric-lbl">ATC Top-3 Accuracy</div></div>', unsafe_allow_html=True)
-    with m3:
-        st.markdown('<div class="metric-card"><div class="metric-val">0.942</div><div class="metric-lbl">Micro F1 Score</div></div>', unsafe_allow_html=True)
-    with m4:
-        st.markdown('<div class="metric-card"><div class="metric-val">0.915</div><div class="metric-lbl">Macro F1 Score</div></div>', unsafe_allow_html=True)
+# --- TAB 5: Evaluation Benchmarks ---
+with tabs[4]:
+    st.markdown("### Evaluación reproducible del sistema RAG")
+    report_paths = sorted(
+        (Path("artifacts/evaluations")).glob("*/report.json"), reverse=True
+    )
+    report_path = report_paths[0] if report_paths else Path("eval/baseline.json")
+    report = json.loads(report_path.read_text(encoding="utf-8")) if report_path.exists() else {}
+    metrics = report.get("metrics", {})
+
+    if metrics:
+        selected_metrics = (
+            ("Recall@5", "recall_at_5"),
+            ("MRR", "mrr"),
+            ("Precisión de citas", "citation_precision"),
+            ("Cobertura de citas", "citation_coverage"),
+            ("F1 de respuesta", "answer_f1"),
+            ("Exactitud de rechazo", "refusal_accuracy"),
+        )
+        columns = st.columns(3)
+        for index, (label, key) in enumerate(selected_metrics):
+            columns[index % 3].metric(label, f"{metrics.get(key, 0):.3f}")
+        st.caption(
+            f"Estado: {report.get('status', 'unknown')} · "
+            f"Fuente: {report.get('source_revision', 'sin registrar')}"
+        )
+    else:
+        st.info("La evaluación completa fijada todavía no se ha ejecutado.")
 
     st.markdown("#### Categorías Anatómicas Principales ATC (Nivel 1)")
     atc_df = pd.DataFrame(list(ATC_LEVEL_1_MAP.items()), columns=["Código ATC", "Nombre del Grupo Anatómico"])

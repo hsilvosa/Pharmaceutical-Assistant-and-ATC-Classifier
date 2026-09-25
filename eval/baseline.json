@@ -1,0 +1,15 @@
+{
+  "status": "not_run",
+  "source_revision": "05da2ddf387a47a274384084068462ad8e2ff908",
+  "metrics": {},
+  "thresholds": {
+    "recall_at_5": 0.85,
+    "mrr": 0.75,
+    "citation_precision": 0.95,
+    "citation_coverage": 0.95,
+    "answer_f1": 0.85,
+    "refusal_accuracy": 0.9
+  },
+  "note": "Replace with the first full pinned GPU evaluation; fixture results are kept separately."
+}
+

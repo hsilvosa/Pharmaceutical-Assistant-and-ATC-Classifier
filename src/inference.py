@@ -1,9 +1,7 @@
 """
 Unified Inference Engine for CIMA Spanish Medical Assistant & ATC Classifier.
-Combines:
-1. Zero-Shot Neural Semantic Vector Search (understands ANY natural language, slang, or novel phrasing)
-2. Targeted Clinical Intent Matcher (for rich clinical advice, dose disclaimers & prescription warnings)
-3. BETO ATC Hierarchical Classifier Engine
+Combines the grounded CIMA RAG service, the existing medication catalogue search,
+and the BETO ATC hierarchical classifier behind one application-facing facade.
 """
 from src.utils import setup_environment, setup_logger, get_device
 setup_environment()
@@ -280,12 +278,49 @@ class CIMASemanticVectorRetriever:
         return results
 
 class CIMAMedicalAssistantEngine:
-    """Unified Clinical & Neural Semantic Medical Assistant Engine."""
+    """Unified facade for the existing catalogue, classifiers, and grounded CIMA RAG."""
+
     def __init__(self):
         self.dataset_path = Path(PROCESSED_DATA_DIR) / "atc_dataset.parquet"
         self.df_meds = None
         self.retriever = None
+        self._rag_service = None
+        self._rag_error = None
         self._load_knowledge_base()
+
+    def _get_rag_service(self):
+        """Load and cache the grounded service behind the existing assistant facade."""
+        if self._rag_service is not None:
+            return self._rag_service
+        if self._rag_error is not None:
+            raise RuntimeError(self._rag_error)
+
+        try:
+            from src.rag.api import load_service
+            from src.rag.config import Settings
+
+            self._rag_service = load_service(Settings())
+            return self._rag_service
+        except (FileNotFoundError, RuntimeError, ValueError) as exc:
+            self._rag_error = str(exc)
+            raise RuntimeError(self._rag_error) from exc
+
+    def query_evidence(
+        self,
+        question: str,
+        registration_number: str | None = None,
+        language: str = "auto",
+    ):
+        """Answer through the grounded RAG pipeline using the existing assistant object."""
+        from src.rag.models import QueryRequest
+
+        return self._get_rag_service().query(
+            QueryRequest(
+                question=question,
+                registration_number=registration_number,
+                language=language,
+            )
+        )
 
     def _load_knowledge_base(self):
         if self.dataset_path.exists():
@@ -294,9 +329,34 @@ class CIMAMedicalAssistantEngine:
             self.retriever = CIMASemanticVectorRetriever(self.df_meds)
 
     def search_medications(self, query: str, limit: int = 5) -> list:
-        """Search CIMA medication database by medication name or active ingredient."""
-        if self.df_meds is None or not query:
+        """Search the indexed CIMA catalogue, then enrich it with legacy ATC fields."""
+        if not query:
             return []
+
+        grounded = []
+        try:
+            for item in self._get_rag_service().resolver.search(query, limit=limit):
+                grounded.append(
+                    {
+                        "registration_number": item.registration_number,
+                        "name": item.name,
+                        "presentation": item.presentation,
+                        "national_code": item.national_code,
+                        "photo_url": item.photo_url,
+                        "dose": None,
+                        "pharmaceutical_form": item.presentation or None,
+                        "active_ingredients": None,
+                        "atc_code": None,
+                        "atc_level1_name": None,
+                        "routes": None,
+                        "prescription_required": None,
+                    }
+                )
+        except RuntimeError:
+            pass
+
+        if self.df_meds is None:
+            return grounded
         
         q = query.lower().strip()
         mask = (
@@ -319,7 +379,18 @@ class CIMAMedicalAssistantEngine:
                 "routes": r.get("routes_str"),
                 "prescription_required": bool(r.get("prescription_required", False))
             })
-        return results
+        by_registration = {
+            str(item.get("registration_number")): item for item in results
+        }
+        for item in grounded:
+            registration = str(item["registration_number"])
+            if registration in by_registration:
+                by_registration[registration].update(
+                    {key: value for key, value in item.items() if value}
+                )
+            else:
+                by_registration[registration] = item
+        return list(by_registration.values())[:limit]
 
     def detect_symptoms_and_recommend(self, query: str) -> dict:
         """Detect clinical symptoms in query and return targeted recommendations."""
@@ -379,10 +450,19 @@ class CIMAMedicalAssistantEngine:
 
             meds_md = ""
             for m in meds:
-                presc = "Requiere Receta Médica" if m["prescription_required"] else "Venta Libre (EFP)"
-                meds_md += f"- **{m['name']}** ({m['dose'] or 'Dosis estándar'})\n"
-                meds_md += f"  - *Principio Activo*: {m['active_ingredients']}\n"
-                meds_md += f"  - *Forma / Vía*: {m['pharmaceutical_form']} ({m['routes']})\n"
+                prescription = m.get("prescription_required")
+                if prescription is True:
+                    presc = "Requiere Receta Médica"
+                elif prescription is False:
+                    presc = "Venta Libre (EFP)"
+                else:
+                    presc = "Consultar ficha oficial"
+                meds_md += f"- **{m.get('name', 'Medicamento CIMA')}** ({m.get('dose') or 'Ver ficha'})\n"
+                meds_md += f"  - *Principio Activo*: {m.get('active_ingredients') or 'Ver ficha'}\n"
+                meds_md += (
+                    f"  - *Forma / Vía*: {m.get('pharmaceutical_form') or 'Ver ficha'} "
+                    f"({m.get('routes') or 'Ver ficha'})\n"
+                )
                 meds_md += f"  - *Régimen*: {presc}\n\n"
 
             answer = (
@@ -406,12 +486,12 @@ class CIMAMedicalAssistantEngine:
             if semantic_matches and semantic_matches[0]["score"] > 0.001:
                 meds_md = ""
                 for m in semantic_matches:
-                    presc = "Requiere Receta Médica" if m["prescription_required"] else "Venta Libre (EFP)"
-                    atc_info = f"{m['atc_code']} ({m['atc_name'] or m['atc_level1_name']})"
-                    meds_md += f"- **{m['name']}** (Dosis: {m['dose'] or 'Ver envase'})\n"
-                    meds_md += f"  - *Principio Activo*: {m['active_ingredients'] or 'Ver prospecto'}\n"
+                    presc = "Requiere Receta Médica" if m.get("prescription_required") else "Venta Libre (EFP)"
+                    atc_info = f"{m.get('atc_code')} ({m.get('atc_name') or m.get('atc_level1_name')})"
+                    meds_md += f"- **{m.get('name', 'Medicamento CIMA')}** (Dosis: {m.get('dose') or 'Ver envase'})\n"
+                    meds_md += f"  - *Principio Activo*: {m.get('active_ingredients') or 'Ver prospecto'}\n"
                     meds_md += f"  - *Categoría ATC*: `{atc_info}`\n"
-                    meds_md += f"  - *Forma / Vía*: {m['pharmaceutical_form']} ({m['routes']})\n"
+                    meds_md += f"  - *Forma / Vía*: {m.get('pharmaceutical_form') or 'Ver ficha'} ({m.get('routes') or 'Ver ficha'})\n"
                     meds_md += f"  - *Régimen*: {presc}\n\n"
 
                 answer = (
@@ -433,6 +513,32 @@ class CIMAMedicalAssistantEngine:
             f"Intente describir el problema de salud o el medicamento con más detalle."
         )
         return {"answer": answer, "matched_medication": None}
+
+    def answer_with_evidence(
+        self,
+        query: str,
+        registration_number: str | None = None,
+        language: str = "auto",
+    ) -> dict:
+        """Return the grounded RAG response as a serializable compatibility dictionary."""
+        if not query or not query.strip():
+            return {
+                "status": "insufficient_evidence",
+                "answer": "Introduce una pregunta sobre la documentación de un medicamento.",
+                "citations": [],
+                "candidates": [],
+            }
+        try:
+            response = self.query_evidence(query, registration_number, language)
+            return response.model_dump(mode="json")
+        except RuntimeError as exc:
+            return {
+                "status": "unavailable",
+                "answer": "El índice documental CIMA no está disponible.",
+                "citations": [],
+                "candidates": [],
+                "detail": str(exc),
+            }
 
 if __name__ == "__main__":
     qa_engine = CIMAMedicalAssistantEngine()

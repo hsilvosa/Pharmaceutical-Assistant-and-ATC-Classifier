@@ -2,12 +2,14 @@
 __pycache__/
 *.py[cod]
 *$py.class
+*.egg-info/
 .pytest_cache
 # Data directories and datasets
 data/
 data/processed/
 *.parquet
 *.jsonl
+!eval/*.jsonl
 
 # Model checkpoints and weight binaries
 models/
@@ -37,3 +39,9 @@ htmlcov/
 .idea/
 .DS_Store
 Thumbs.db
+
+# Local RAG artifacts
+indexes/
+artifacts/
+data/huggingface-cache/
+models/qwen3/
