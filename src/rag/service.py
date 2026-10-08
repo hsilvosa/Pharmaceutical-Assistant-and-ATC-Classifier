@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import re
 import time
+import unicodedata
 from collections.abc import Sequence
 
 from pydantic import ValidationError
@@ -42,7 +43,9 @@ def detect_language(question: str, requested: str) -> str:
 
 
 def personalized_medical_request(question: str) -> bool:
-    normalized = re.sub(r"\s+", " ", question.casefold())
+    decomposed = unicodedata.normalize("NFKD", question.casefold())
+    unaccented = "".join(char for char in decomposed if not unicodedata.combining(char))
+    normalized = re.sub(r"\s+", " ", unaccented)
     return any(re.search(pattern, normalized) for pattern in PERSONALIZED_PATTERNS)
 
 

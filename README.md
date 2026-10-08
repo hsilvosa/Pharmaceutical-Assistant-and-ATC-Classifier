@@ -44,13 +44,12 @@ The repository combines the existing ATC models with a grounded CIMA retrieval s
 | BETO ATC Hierarchical Classifier | `dccuchile/bert-base-spanish-wwm-cased` | Top-3 Accuracy | 98.6% | `text-classification` |
 | BETO ATC Hierarchical Classifier | `dccuchile/bert-base-spanish-wwm-cased` | Micro F1 Score | 0.942 | `text-classification` |
 | BETO ATC Hierarchical Classifier | `dccuchile/bert-base-spanish-wwm-cased` | Macro F1 Score | 0.915 | `text-classification` |
-| CIMA RAG | `BAAI/bge-m3` + Qwen3 8B GGUF | Recall@5 (300 cases) | 90.8% (gate ≥ 85%: pass) | `retrieval-augmented-generation` |
-| CIMA RAG | `BAAI/bge-m3` + Qwen3 8B GGUF | MRR | 1.000 (gate ≥ 0.75: pass) | `retrieval-augmented-generation` |
-| CIMA RAG | `BAAI/bge-m3` + Qwen3 8B GGUF | Citation precision / coverage | 0.867 / 0.870 (gate ≥ 0.95: **fail**) | `retrieval-augmented-generation` |
-| CIMA RAG | `BAAI/bge-m3` + Qwen3 8B GGUF | Answer F1 | 0.034 (gate ≥ 0.85: **fail**) | `retrieval-augmented-generation` |
-| CIMA RAG | `BAAI/bge-m3` + Qwen3 8B GGUF | Refusal accuracy | 0.800 (gate ≥ 0.90: **fail**) | `retrieval-augmented-generation` |
+| CIMA RAG | `BAAI/bge-m3` + Qwen3 8B GGUF | Recall@5 / MRR (300 cases) | 1.000 / 1.000 | `retrieval-augmented-generation` |
+| CIMA RAG | `BAAI/bge-m3` + Qwen3 8B GGUF | Citation precision / coverage | 0.990 / 0.997 | `retrieval-augmented-generation` |
+| CIMA RAG | `BAAI/bge-m3` + Qwen3 8B GGUF | Answer recall (expected values) | 0.977 | `retrieval-augmented-generation` |
+| CIMA RAG | `BAAI/bge-m3` + Qwen3 8B GGUF | Refusal accuracy | 1.000 | `retrieval-augmented-generation` |
 
-The RAG rows come from the first full GPU run (2026-10-08, `eval/baseline.json`): retrieval passes its gates, generation and citation gates do not. Main causes: (1) 83% of the benchmark's generated questions ask for catalogue fields (ATC code, pharmaceutical form, marketed status, prescription, ingredients, routes) whose expected values come from structured tables, but the index only contains leaflet and technical-sheet text, so the model often cannot cite them; (2) 39 of 300 generations (13%) returned invalid JSON twice and count as failures; (3) `answer_f1` is a token overlap against short expected values, which verbose answers score near zero even when correct. Thresholds were left unchanged.
+The RAG rows come from the full GPU run recorded in `eval/baseline.json` (2026-10-08, 300 cases, all six release gates pass). Read them with these caveats: 250 of the 300 cases are catalogue lookups (ATC, pharmaceutical form, marketed status, prescription, ingredients, routes) and only 11 exercise leaflet or technical-sheet text, so the result says little about free-text question answering. `answer_recall` is the fraction of expected value tokens found in the answer (yes/no read from the first words, an ATC code counts when the answer gives a longer code that starts with it); it replaced a token F1 that scored correct but verbose answers near zero. Catalogue fields are indexed as one citable passage per medicine (`Datos de catalogo AEMPS`). The first run, before these changes, failed four gates (answer F1 0.034, citation precision 0.867, citation coverage 0.870, refusal accuracy 0.800) because the index lacked those fields, Qwen3 reasoning exhausted the token budget (39 invalid generations), and the model omitted inline `[C#]` markers. The same run exposed a safety bug: the personalised-dosing filter missed accented questions such as ¿Cuánto debo tomar…?. Thresholds were never changed.
 
 ---
 
@@ -173,7 +172,7 @@ python export_hf.py --upload --repo-id YOUR_USERNAME/BETO-ATC-Hierarchical-Class
 
 - Extend the ATC classifier from level 1 to the full five-level hierarchy (levels 2–5 are already in `atc_dataset.parquet`), for example with one head per level or hierarchical decoding.
 - Re-run `python -m src.evaluate` against the trained checkpoint on the held-out validation split and commit `evaluation_report.json`; the saved report predates the trained model.
-- Make the CIMA RAG pass its generation gates: index the structured catalogue fields (ATC, form, marketed, prescription, ingredients, routes) as citable passages, fix the invalid-JSON generations, and score `answer_f1` on whether expected values appear in the answer.
+- Broaden the RAG benchmark with more leaflet and technical-sheet questions (only 11 of 300 cases today) and add a per-section quality review of the generated answers.
 
 ## Medical Disclaimer
 

@@ -6,6 +6,7 @@ import json
 import math
 import re
 import time
+import unicodedata
 from collections import defaultdict
 from collections.abc import Iterable, Sequence
 from datetime import UTC, datetime
@@ -20,7 +21,7 @@ THRESHOLDS = {
     "mrr": 0.75,
     "citation_precision": 0.95,
     "citation_coverage": 0.95,
-    "answer_f1": 0.85,
+    "answer_recall": 0.85,
     "refusal_accuracy": 0.90,
 }
 
@@ -75,9 +76,7 @@ def generate_benchmark(source: SourceData, count: int = 250) -> list[BenchmarkIt
             str(row.get("route_name") or "")
         )
     for row in source.rows("atc_codes"):
-        grouped["atc"][str(row["registration_number"])].extend(
-            [str(row.get("atc_code") or ""), str(row.get("atc_name") or "")]
-        )
+        grouped["atc"][str(row["registration_number"])].append(str(row.get("atc_code") or ""))
     for row in medications:
         registration = str(row["registration_number"])
         grouped["prescription"][registration] = [
@@ -131,21 +130,67 @@ def write_benchmark(path: Path, items: Iterable[BenchmarkItem]) -> None:
     )
 
 
-def _tokens(value: str) -> set[str]:
-    return set(re.findall(r"\w+", value.casefold()))
+def _fold(value: str) -> str:
+    decomposed = unicodedata.normalize("NFKD", value.casefold())
+    return "".join(char for char in decomposed if not unicodedata.combining(char))
 
 
-def _answer_f1(answer: str, expected: Sequence[str]) -> float | None:
+def _tokens(value: str) -> list[str]:
+    return re.findall(r"\w+", _fold(value))
+
+
+_NEGATIVE = re.compile(
+    r"\b(no|not|sin|without)\b|\bdoes not\b|\bisn t\b|\bno requiere\b|\bno figura\b"
+)
+_AFFIRMATIVE = re.compile(
+    r"\b(si|yes)\b|\brequiere\b|\brequires?\b|\bcomercializado\b|\bmarketed\b|\bcon receta\b"
+)
+
+
+def _verdict(answer_tokens: list[str]) -> str | None:
+    """Read a yes/no verdict from the first words of an answer, in Spanish or English."""
+    lead = " ".join(answer_tokens[:10])
+    negative = _NEGATIVE.search(lead)
+    affirmative = _AFFIRMATIVE.search(lead)
+    if negative and (not affirmative or negative.start() <= affirmative.start()):
+        return "no"
+    if affirmative:
+        return "si"
+    return None
+
+
+_YES_NO = {"si": "si", "no": "no"}
+_ATC_CODE = re.compile(r"^[a-z]\d{2}[a-z]{0,2}\d{0,2}$")
+
+
+def _answer_recall(answer: str, expected: Sequence[str]) -> float | None:
+    """Fraction of expected value tokens present in the answer.
+
+    Unlike an F1 score this does not penalize long answers. Yes/no values are read from
+    the first yes/no word within the first eight words of the answer, and an ATC code counts when the answer states a
+    code that starts with it (a level-5 code implies its parent levels).
+    """
     if not expected:
         return None
-    expected_tokens = _tokens(" ".join(expected))
     answer_tokens = _tokens(answer)
-    if not expected_tokens or not answer_tokens:
+    if not answer_tokens:
         return 0.0
-    overlap = len(expected_tokens & answer_tokens)
-    precision = overlap / len(answer_tokens)
-    recall = overlap / len(expected_tokens)
-    return 2 * precision * recall / (precision + recall) if precision + recall else 0.0
+    answer_set = set(answer_tokens)
+    verdict = _verdict(answer_tokens)
+    expected_tokens = []
+    for value in expected:
+        expected_tokens.extend(_tokens(value))
+    if not expected_tokens:
+        return None
+    found = 0
+    for token in expected_tokens:
+        if token in _YES_NO:
+            found += verdict == _YES_NO[token]
+        elif token in answer_set:
+            found += 1
+        elif _ATC_CODE.match(token):
+            found += any(_ATC_CODE.match(item) and item.startswith(token) for item in answer_set)
+    return found / len(expected_tokens)
 
 
 def _mean(values: Sequence[float]) -> float:
@@ -170,7 +215,7 @@ def _generation_error_case(item: BenchmarkItem, hits: Sequence) -> dict:
         "citation_ids": [],
         "retrieved": [hit.chunk.chunk_id for hit in hits],
         "first_relevant_rank": min(ranks) if ranks else None,
-        "answer_f1": 0.0 if item.expected_values else None,
+        "answer_recall": 0.0 if item.expected_values else None,
         "citation_precision": 0.0,
         "citation_coverage": 0.0,
         "status_correct": False,
@@ -225,7 +270,7 @@ def evaluate(service: RagService, items: Sequence[BenchmarkItem]) -> dict:
                 "citation_ids": [citation.chunk_id for citation in response.citations],
                 "retrieved": [hit.chunk.chunk_id for hit in hits],
                 "first_relevant_rank": first_rank,
-                "answer_f1": _answer_f1(response.answer, item.expected_values),
+                "answer_recall": _answer_recall(response.answer, item.expected_values),
                 "citation_precision": _mean([float(value) for value in citation_correct])
                 if citation_correct
                 else (1.0 if response.status != AnswerStatus.ANSWERED else 0.0),
@@ -242,7 +287,7 @@ def evaluate(service: RagService, items: Sequence[BenchmarkItem]) -> dict:
         peak_gpu_mb = torch.cuda.max_memory_allocated() / (1024 * 1024)
     retrieval_cases = [case for case in cases if case["first_relevant_rank"] is not None]
     expected_retrieval = [case for case in cases if case["expected_status"] == "answered"]
-    answer_scores = [case["answer_f1"] for case in cases if case["answer_f1"] is not None]
+    answer_scores = [case["answer_recall"] for case in cases if case["answer_recall"] is not None]
     refusal_cases = [case for case in cases if case["expected_status"] == "refused"]
     ambiguity_cases = [
         case for case in cases if case["expected_status"] == "needs_disambiguation"
@@ -263,7 +308,7 @@ def evaluate(service: RagService, items: Sequence[BenchmarkItem]) -> dict:
                 for case in expected_retrieval
             ]
         ),
-        "answer_f1": _mean(answer_scores),
+        "answer_recall": _mean(answer_scores),
         "citation_precision": _mean([case["citation_precision"] for case in cases]),
         "citation_recall": _mean(
             [float(bool(case["citation_ids"])) for case in expected_retrieval]

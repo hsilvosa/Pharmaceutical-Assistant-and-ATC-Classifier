@@ -253,7 +253,7 @@ with tabs[4]:
             ("MRR", "mrr"),
             ("Precisión de citas", "citation_precision"),
             ("Cobertura de citas", "citation_coverage"),
-            ("F1 de respuesta", "answer_f1"),
+            ("Recall de valores esperados", "answer_recall"),
             ("Exactitud de rechazo", "refusal_accuracy"),
         )
         columns = st.columns(3)

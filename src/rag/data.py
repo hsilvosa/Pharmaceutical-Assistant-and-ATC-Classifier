@@ -10,9 +10,10 @@ from typing import Any
 import pyarrow.dataset as ds
 import pyarrow.parquet as pq
 
-from .chunking import OffsetTokenizer, chunk_document
+from .chunking import OffsetTokenizer, _digest, chunk_document
 from .models import Chunk, MedicineCandidate
 
+CATALOG_TITLE = "Datos de catalogo AEMPS"
 TABLES = ("medications", "presentations", "documents", "document_links", "photos")
 
 
@@ -212,7 +213,89 @@ def stream_records(
                 overlap_tokens=overlap_tokens,
             )
 
-    return generate(), list(entities.values()), rejected
+    def generate_all() -> Iterator[Chunk]:
+        # Catalogue passages come last so an existing document-only index can be extended
+        # with --resume instead of being rebuilt.
+        yield from generate()
+        yield from catalog_chunks(source, medications, photo_by_registration)
+
+    return generate_all(), list(entities.values()), rejected
+
+
+def _by_registration(rows: Iterable[dict[str, Any]]) -> dict[str, list[dict[str, Any]]]:
+    grouped: dict[str, list[dict[str, Any]]] = {}
+    for row in rows:
+        grouped.setdefault(str(row["registration_number"]), []).append(row)
+    for values in grouped.values():
+        values.sort(key=lambda row: int(row.get("position") or 0))
+    return grouped
+
+
+def catalog_chunks(
+    source: SourceData,
+    medications: Iterable[dict[str, Any]],
+    photo_by_registration: dict[str, str],
+) -> Iterator[Chunk]:
+    """One citable passage per medicine with its structured AEMPS catalogue fields."""
+    ingredients = _by_registration(source.iter_rows("active_ingredients"))
+    routes = _by_registration(source.iter_rows("administration_routes"))
+    atc = _by_registration(source.iter_rows("atc_codes"))
+    for row in medications:
+        registration = str(row["registration_number"])
+        name = str(row.get("name") or "")
+        if not name:
+            continue
+        form = str(row.get("pharmaceutical_form_name") or "").strip()
+        conditions = str(row.get("prescription_conditions") or "").strip()
+        ingredient_text = "; ".join(
+            " ".join(
+                part
+                for part in (
+                    str(item.get("ingredient_name") or "").strip(),
+                    str(item.get("quantity") or "").strip(),
+                    str(item.get("unit") or "").strip(),
+                )
+                if part
+            )
+            for item in ingredients.get(registration, [])
+        )
+        route_text = "; ".join(
+            str(item.get("route_name") or "").strip() for item in routes.get(registration, [])
+        )
+        atc_text = "; ".join(
+            f"{item.get('atc_code') or ''} ({item.get('atc_name') or ''})"
+            for item in atc.get(registration, [])
+        )
+        lines = [
+            f"Datos de catalogo AEMPS de {name} (registro {registration}).",
+            f"Forma farmaceutica (pharmaceutical form): {form or 'no consta'}.",
+            "Comercializacion (marketed): "
+            + ("si, comercializado (yes, marketed)." if row.get("marketed") else "no comercializado (no, not marketed)."),
+            "Receta (prescription required): "
+            + ("si, requiere receta (yes)" if row.get("prescription_required") else "no requiere receta (no)")
+            + (f"; condiciones de prescripcion: {conditions}." if conditions else "."),
+            f"Principios activos (active ingredients): {ingredient_text or 'no constan'}.",
+            f"Vias de administracion (administration routes): {route_text or 'no constan'}.",
+            f"Clasificacion ATC (ATC classification): {atc_text or 'no consta'}.",
+        ]
+        text = "\n".join(lines)
+        content_hash = _digest(text)
+        yield Chunk(
+            chunk_id=_digest("|".join([source.revision, registration, "catalog", content_hash])),
+            registration_number=registration,
+            medicine_name=name,
+            document_type=0,
+            section="catalogo",
+            title=CATALOG_TITLE,
+            source_order=0,
+            char_start=0,
+            char_end=len(text),
+            text=text,
+            embedding_text=f"{name} | {CATALOG_TITLE}\n{text}",
+            source_url=f"https://cima.aemps.es/cima/publico/detalle.html?nregistro={registration}",
+            photo_url=photo_by_registration.get(registration, ""),
+            content_hash=content_hash,
+        )
 
 
 def iter_batches(values: Iterable[Any], size: int) -> Iterator[list[Any]]:

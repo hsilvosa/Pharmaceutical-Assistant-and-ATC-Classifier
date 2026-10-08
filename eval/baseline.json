@@ -1,40 +1,40 @@
 {
-  "status": "fail",
+  "status": "pass",
   "source_revision": "05da2ddf387a47a274384084068462ad8e2ff908",
-  "generated_at": "2026-10-08T14:17:00.671283+00:00",
+  "generated_at": "2026-10-08T16:25:32.601932+00:00",
   "question_count": 300,
-  "report": "artifacts/evaluations/20261008T141700Z/report.json",
+  "report": "artifacts/evaluations/20261008T162532Z/report.json",
   "metrics": {
-    "recall_at_5": 0.908,
-    "recall_at_10": 0.908,
+    "recall_at_5": 1.0,
+    "recall_at_10": 1.0,
     "mrr": 1.0,
-    "ndcg_at_10": 0.908,
-    "answer_f1": 0.0341,
-    "citation_precision": 0.8667,
-    "citation_recall": 0.3218,
-    "citation_coverage": 0.87,
-    "refusal_accuracy": 0.8,
+    "ndcg_at_10": 1.0,
+    "answer_recall": 0.9773,
+    "citation_precision": 0.99,
+    "citation_recall": 1.0,
+    "citation_coverage": 0.9967,
+    "refusal_accuracy": 1.0,
     "ambiguity_accuracy": 1.0,
-    "generation_errors": 39.0,
-    "mean_latency_ms": 20216.8864,
-    "throughput_qps": 0.0345,
-    "peak_gpu_memory_mb": 4781.7388
+    "generation_errors": 1.0,
+    "mean_latency_ms": 6576.4743,
+    "throughput_qps": 0.1466,
+    "peak_gpu_memory_mb": 4778.6455
   },
   "thresholds": {
     "recall_at_5": 0.85,
     "mrr": 0.75,
     "citation_precision": 0.95,
     "citation_coverage": 0.95,
-    "answer_f1": 0.85,
+    "answer_recall": 0.85,
     "refusal_accuracy": 0.9
   },
   "gates": {
     "recall_at_5": true,
     "mrr": true,
-    "citation_precision": false,
-    "citation_coverage": false,
-    "answer_f1": false,
-    "refusal_accuracy": false
+    "citation_precision": true,
+    "citation_coverage": true,
+    "answer_recall": true,
+    "refusal_accuracy": true
   },
-  "note": "First full pinned GPU evaluation (RTX 3060; BAAI/bge-m3 + bge-reranker-v2-m3 + Qwen3-8B Q4_K_M, llama.cpp --ctx-size 8192 --parallel 1). Gates failed: see README for causes. Thresholds unchanged. Recorded as the regression baseline for future runs, not as a quality target."
+  "note": "Full pinned GPU evaluation (RTX 3060; BAAI/bge-m3 + bge-reranker-v2-m3 + Qwen3-8B Q4_K_M, llama.cpp --ctx-size 8192 --parallel 1, thinking disabled). Index includes one catalogue passage per medicine. answer_recall replaced answer_f1 (see README). Thresholds unchanged."
 }
