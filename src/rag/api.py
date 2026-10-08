@@ -129,7 +129,11 @@ def create_app(
     def latest_evaluation() -> dict:
         if active_settings is None:
             return {"status": "not_run", "metrics": {}}
-        reports = sorted(active_settings.evaluations_dir.glob("*/report.json"), reverse=True)
+        reports = sorted(
+            active_settings.evaluations_dir.glob("*/report.json"),
+            key=lambda path: path.stat().st_mtime,
+            reverse=True,
+        )
         if reports:
             return json.loads(reports[0].read_text(encoding="utf-8"))
         if active_settings.baseline_path.exists():

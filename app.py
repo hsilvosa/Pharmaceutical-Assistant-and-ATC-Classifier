@@ -241,7 +241,9 @@ with tabs[3]:
 with tabs[4]:
     st.markdown("### Evaluación reproducible del sistema RAG")
     report_paths = sorted(
-        (Path("artifacts/evaluations")).glob("*/report.json"), reverse=True
+        (Path("artifacts/evaluations")).glob("*/report.json"),
+        key=lambda path: path.stat().st_mtime,
+        reverse=True,
     )
     report_path = report_paths[0] if report_paths else Path("eval/baseline.json")
     report = json.loads(report_path.read_text(encoding="utf-8")) if report_path.exists() else {}
