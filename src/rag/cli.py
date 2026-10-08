@@ -32,6 +32,11 @@ def _parser() -> argparse.ArgumentParser:
     build.add_argument("--local-data", type=Path)
     build.add_argument("--max-registrations", type=int)
     build.add_argument("--fixture", action="store_true")
+    build.add_argument(
+        "--resume",
+        action="store_true",
+        help="continue an interrupted build from the chunks already written to the index",
+    )
 
     serve = commands.add_parser("serve")
     serve.add_argument("--host", default="127.0.0.1")
@@ -77,7 +82,7 @@ def _build(args: argparse.Namespace) -> int:
             details["repo_id"], details["revision"], settings.device
         )
         model_revisions = {name: str(details["revision"]) for name, details in lock.items()}
-    if settings.index_dir.exists():
+    if settings.index_dir.exists() and not args.resume:
         shutil.rmtree(settings.index_dir)
     manifest = build_index(
         source=source,
@@ -88,6 +93,7 @@ def _build(args: argparse.Namespace) -> int:
         model_revisions=model_revisions,
         batch_size=settings.embedding_batch_size,
         max_registrations=args.max_registrations,
+        resume=args.resume,
     )
     print(manifest.model_dump_json(indent=2))
     return 0

@@ -12,6 +12,9 @@ import numpy as np
 from .models import Chunk, MedicineCandidate, SearchHit
 
 
+WRITE_BATCH_ROWS = 10_000
+
+
 class SearchStore(Protocol):
     def dense_search(
         self, vector: Sequence[float], limit: int, registration_number: str | None = None
@@ -29,6 +32,84 @@ def _where_registration(registration_number: str | None) -> str | None:
         return None
     safe = registration_number.replace("'", "''")
     return f"registration_number = '{safe}'"
+
+
+class LanceStoreWriter:
+    """Incrementally writes chunks and vectors so large indexes never sit fully in memory."""
+
+    def __init__(self, path: Path, *, resume: bool = False) -> None:
+        import lancedb
+
+        path.mkdir(parents=True, exist_ok=True)
+        self.path = path
+        self.db = lancedb.connect(path)
+        self.table = None
+        self.count = 0
+        self._rows: list[dict] = []
+        if resume and "chunks" in self.db.list_tables().tables:
+            self.table = self.db.open_table("chunks")
+            self.count = self.table.count_rows()
+
+    def iter_persisted(self, batch_size: int = 10_000):
+        """Yield (chunk_id, vector) for rows already written, in insertion order."""
+        if self.table is None:
+            return
+        for offset in range(0, self.count, batch_size):
+            page = (
+                self.table.search()
+                .select(["chunk_id", "vector"])
+                .limit(batch_size)
+                .offset(offset)
+                .to_arrow()
+            )
+            ids = page.column("chunk_id").to_pylist()
+            vectors = (
+                page.column("vector")
+                .combine_chunks()
+                .values.to_numpy(zero_copy_only=False)
+                .astype(np.float32, copy=False)
+                .reshape(len(ids), -1)
+            )
+            yield from zip(ids, vectors, strict=True)
+
+    def add(self, chunks: Sequence[Chunk], vectors: Sequence[Sequence[float]]) -> None:
+        if len(chunks) != len(vectors):
+            raise ValueError("chunks and vectors must have the same length")
+        for chunk, vector in zip(chunks, vectors, strict=True):
+            row = chunk.model_dump()
+            row["vector"] = np.asarray(vector, dtype=np.float32).tolist()
+            self._rows.append(row)
+        if len(self._rows) >= WRITE_BATCH_ROWS:
+            self._flush()
+
+    def _flush(self) -> None:
+        if not self._rows:
+            return
+        if self.table is None:
+            self.table = self.db.create_table("chunks", data=self._rows, mode="overwrite")
+        else:
+            self.table.add(self._rows)
+        self.count += len(self._rows)
+        self._rows = []
+
+    def finish(self, medicines: Sequence[MedicineCandidate]) -> LanceStore:
+        from lancedb.index import FTS
+
+        self._flush()
+        if self.table is None:
+            raise ValueError("Cannot build an empty index")
+        if self.count >= 256:
+            self.table.create_index(vector_column_name="vector", metric="cosine", replace=True)
+        self.table.create_index(
+            "embedding_text",
+            config=FTS(language="Spanish", lower_case=True, ascii_folding=True),
+            replace=True,
+        )
+        (self.path / "entities.json").write_text(
+            json.dumps([item.model_dump() for item in medicines], ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+        return LanceStore(self.path)
 
 
 class LanceStore:
@@ -51,31 +132,9 @@ class LanceStore:
         vectors: Sequence[Sequence[float]],
         medicines: Sequence[MedicineCandidate],
     ) -> LanceStore:
-        import lancedb
-        from lancedb.index import FTS
-
-        if not chunks:
-            raise ValueError("Cannot build an empty index")
-        path.mkdir(parents=True, exist_ok=True)
-        rows = []
-        for chunk, vector in zip(chunks, vectors, strict=True):
-            row = chunk.model_dump()
-            row["vector"] = np.asarray(vector, dtype=np.float32).tolist()
-            rows.append(row)
-        db = lancedb.connect(path)
-        table = db.create_table("chunks", data=rows, mode="overwrite")
-        if len(rows) >= 256:
-            table.create_index(vector_column_name="vector", metric="cosine", replace=True)
-        table.create_index(
-            "embedding_text",
-            config=FTS(language="Spanish", lower_case=True, ascii_folding=True),
-            replace=True,
-        )
-        (path / "entities.json").write_text(
-            json.dumps([item.model_dump() for item in medicines], ensure_ascii=False, indent=2),
-            encoding="utf-8",
-        )
-        return cls(path)
+        writer = LanceStoreWriter(path)
+        writer.add(chunks, vectors)
+        return writer.finish(medicines)
 
     @staticmethod
     def _chunk(row: dict) -> Chunk:

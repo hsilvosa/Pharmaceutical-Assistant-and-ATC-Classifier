@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 import hashlib
-from collections.abc import Iterable
+from collections.abc import Iterable, Iterator
 from dataclasses import dataclass
+from itertools import islice
 from pathlib import Path
 from typing import Any
 
 import pyarrow.dataset as ds
+import pyarrow.parquet as pq
 
 from .chunking import OffsetTokenizer, chunk_document
 from .models import Chunk, MedicineCandidate
@@ -20,15 +22,31 @@ class SourceData:
     revision: str
     checksums: dict[str, str]
 
-    def rows(self, table: str) -> list[dict[str, Any]]:
+    def _table_path(self, table: str) -> Path | None:
         candidates = [self.root / table, self.root / "data" / table]
         path = next((item for item in candidates if item.exists()), None)
         if path is None:
             matches = list(self.root.rglob(f"{table}/*.parquet"))
             if not matches:
-                return []
+                return None
             path = matches[0].parent
+        return path
+
+    def rows(self, table: str) -> list[dict[str, Any]]:
+        path = self._table_path(table)
+        if path is None:
+            return []
         return ds.dataset(path, format="parquet").to_table().to_pylist()
+
+    def iter_rows(self, table: str, batch_size: int = 512) -> Iterable[dict[str, Any]]:
+        """Stream a table row by row without materializing it in memory."""
+        path = self._table_path(table)
+        if path is None:
+            return
+        # ParquetFile keeps only the current batch resident; dataset scanners prefetch GBs.
+        for file in sorted(path.glob("*.parquet")):
+            for batch in pq.ParquetFile(file).iter_batches(batch_size=batch_size):
+                yield from batch.to_pylist()
 
 
 def _sha256(path: Path) -> str:
@@ -70,6 +88,29 @@ def prepare_records(
     max_tokens: int = 512,
     overlap_tokens: int = 64,
 ) -> tuple[list[Chunk], list[MedicineCandidate], dict[str, int]]:
+    chunk_stream, entities, rejected = stream_records(
+        source,
+        tokenizer,
+        max_registrations=max_registrations,
+        max_tokens=max_tokens,
+        overlap_tokens=overlap_tokens,
+    )
+    chunks = list(chunk_stream)
+    return chunks, entities, rejected
+
+
+def stream_records(
+    source: SourceData,
+    tokenizer: OffsetTokenizer,
+    *,
+    max_registrations: int | None = None,
+    max_tokens: int = 512,
+    overlap_tokens: int = 64,
+) -> tuple[Iterator[Chunk], list[MedicineCandidate], dict[str, int]]:
+    """Return a lazy chunk iterator plus medicines and a rejection counter.
+
+    The counter is final only once the iterator has been exhausted.
+    """
     medications = source.rows("medications")
     if max_registrations is not None:
         allowed = {
@@ -94,9 +135,6 @@ def prepare_records(
         row for row in source.rows("document_links") if str(row["registration_number"]) in allowed
     ]
     photos = [row for row in source.rows("photos") if str(row["registration_number"]) in allowed]
-    documents = [
-        row for row in source.rows("documents") if str(row["registration_number"]) in allowed
-    ]
 
     url_by_key: dict[tuple[str, int], str] = {}
     for row in links:
@@ -128,30 +166,37 @@ def prepare_records(
         )
         entities[(registration, candidate.presentation, candidate.national_code)] = candidate
 
-    seen: set[tuple[str, int, str, str]] = set()
-    chunks: list[Chunk] = []
     rejected = {"empty": 0, "duplicate": 0, "missing_medicine": 0, "missing_url": 0}
-    for row in documents:
-        registration = str(row["registration_number"])
-        medicine_name = medicine_names.get(registration, "")
-        if not medicine_name:
-            rejected["missing_medicine"] += 1
-            continue
-        text = str(row.get("content_text") or "").strip()
-        if not text:
-            rejected["empty"] += 1
-            continue
-        document_type = int(row.get("document_type") or 0)
-        dedupe_key = (registration, document_type, str(row.get("section") or ""), text)
-        if dedupe_key in seen:
-            rejected["duplicate"] += 1
-            continue
-        seen.add(dedupe_key)
-        source_url = url_by_key.get((registration, document_type), "")
-        if not source_url:
-            rejected["missing_url"] += 1
-        chunks.extend(
-            chunk_document(
+
+    def generate() -> Iterator[Chunk]:
+        seen: set[tuple[str, int, str, bytes]] = set()
+        for row in source.iter_rows("documents"):
+            registration = str(row["registration_number"])
+            if registration not in allowed:
+                continue
+            medicine_name = medicine_names.get(registration, "")
+            if not medicine_name:
+                rejected["missing_medicine"] += 1
+                continue
+            text = str(row.get("content_text") or "").strip()
+            if not text:
+                rejected["empty"] += 1
+                continue
+            document_type = int(row.get("document_type") or 0)
+            dedupe_key = (
+                registration,
+                document_type,
+                str(row.get("section") or ""),
+                hashlib.sha256(text.encode("utf-8")).digest(),
+            )
+            if dedupe_key in seen:
+                rejected["duplicate"] += 1
+                continue
+            seen.add(dedupe_key)
+            source_url = url_by_key.get((registration, document_type), "")
+            if not source_url:
+                rejected["missing_url"] += 1
+            yield from chunk_document(
                 dataset_revision=source.revision,
                 registration_number=registration,
                 medicine_name=medicine_name,
@@ -166,10 +211,11 @@ def prepare_records(
                 max_tokens=max_tokens,
                 overlap_tokens=overlap_tokens,
             )
-        )
-    return chunks, list(entities.values()), rejected
+
+    return generate(), list(entities.values()), rejected
 
 
-def iter_batches(values: list[Any], size: int) -> Iterable[list[Any]]:
-    for start in range(0, len(values), size):
-        yield values[start : start + size]
+def iter_batches(values: Iterable[Any], size: int) -> Iterator[list[Any]]:
+    iterator = iter(values)
+    while batch := list(islice(iterator, size)):
+        yield batch

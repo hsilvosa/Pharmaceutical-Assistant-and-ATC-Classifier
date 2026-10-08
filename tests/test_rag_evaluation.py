@@ -38,6 +38,33 @@ def test_evaluation_produces_metrics_and_reports(fixture_components, tmp_path) -
     assert "CIMA RAG evaluation" in (tmp_path / "report.html").read_text(encoding="utf-8")
 
 
+def test_generation_failure_is_recorded_as_failed_case(fixture_components) -> None:
+    _, _, _, service = fixture_components
+
+    class _BrokenGenerator:
+        def generate(self, question, language, hits) -> str:
+            return '{"status": "answered", "answer": "cortado'
+
+    service.generator = _BrokenGenerator()
+    item = BenchmarkItem(
+        id="q1",
+        split="test",
+        category="section_qa",
+        language="es",
+        question="Contraindicaciones de Ácido Ejemplo 100 mg",
+        registration_number="10001",
+        relevant_registration_numbers=["10001"],
+        expected_status=AnswerStatus.ANSWERED,
+    )
+    report = evaluate(service, [item])
+    case = report["cases"][0]
+    assert case["actual_status"] == "generation_error"
+    assert case["status_correct"] is False
+    assert case["first_relevant_rank"] is not None
+    assert report["metrics"]["generation_errors"] == 1.0
+    assert report["status"] == "fail"
+
+
 def test_regression_comparison_allows_three_points() -> None:
     report = {"metrics": {name: 0.90 for name in THRESHOLDS}}
     baseline = {"metrics": {name: 0.92 for name in THRESHOLDS}}

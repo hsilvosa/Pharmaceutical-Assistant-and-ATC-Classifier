@@ -13,7 +13,7 @@ from pathlib import Path
 
 from .data import SourceData
 from .models import AnswerStatus, BenchmarkItem, QueryRequest
-from .service import RagService
+from .service import GenerationError, RagService
 
 THRESHOLDS = {
     "recall_at_5": 0.85,
@@ -152,6 +152,32 @@ def _mean(values: Sequence[float]) -> float:
     return sum(values) / len(values) if values else 0.0
 
 
+def _generation_error_case(item: BenchmarkItem, hits: Sequence) -> dict:
+    relevant = set(item.relevant_registration_numbers)
+    ranks = [
+        rank
+        for rank, hit in enumerate(hits, start=1)
+        if hit.chunk.registration_number in relevant
+    ]
+    return {
+        "id": item.id,
+        "split": item.split,
+        "category": item.category,
+        "question": item.question,
+        "expected_status": item.expected_status.value,
+        "actual_status": "generation_error",
+        "answer": "",
+        "citation_ids": [],
+        "retrieved": [hit.chunk.chunk_id for hit in hits],
+        "first_relevant_rank": min(ranks) if ranks else None,
+        "answer_f1": 0.0 if item.expected_values else None,
+        "citation_precision": 0.0,
+        "citation_coverage": 0.0,
+        "status_correct": False,
+        "latency_ms": 0.0,
+    }
+
+
 def evaluate(service: RagService, items: Sequence[BenchmarkItem]) -> dict:
     started = time.perf_counter()
     cases = []
@@ -165,13 +191,18 @@ def evaluate(service: RagService, items: Sequence[BenchmarkItem]) -> dict:
         torch = None  # type: ignore[assignment]
 
     for item in items:
-        response, hits = service.query_with_trace(
-            QueryRequest(
-                question=item.question,
-                registration_number=item.registration_number,
-                language=item.language,
+        try:
+            response, hits = service.query_with_trace(
+                QueryRequest(
+                    question=item.question,
+                    registration_number=item.registration_number,
+                    language=item.language,
+                )
             )
-        )
+        except GenerationError as exc:
+            # A generation failure is a failed case, not a reason to abort the whole run.
+            cases.append(_generation_error_case(item, exc.hits))
+            continue
         relevant = set(item.relevant_registration_numbers)
         ranks = [
             rank
@@ -240,6 +271,9 @@ def evaluate(service: RagService, items: Sequence[BenchmarkItem]) -> dict:
         "citation_coverage": _mean([case["citation_coverage"] for case in cases]),
         "refusal_accuracy": _mean([float(case["status_correct"]) for case in refusal_cases]),
         "ambiguity_accuracy": _mean([float(case["status_correct"]) for case in ambiguity_cases]),
+        "generation_errors": float(
+            sum(case["actual_status"] == "generation_error" for case in cases)
+        ),
         "mean_latency_ms": _mean([case["latency_ms"] for case in cases]),
         "throughput_qps": len(cases) / elapsed if elapsed else 0.0,
         "peak_gpu_memory_mb": peak_gpu_mb,

@@ -16,7 +16,7 @@ from .models import GeneratedAnswer, SearchHit
 class Embedder(Protocol):
     dimension: int
 
-    def encode(self, texts: Sequence[str]) -> list[list[float]]: ...
+    def encode(self, texts: Sequence[str]) -> Sequence[Sequence[float]]: ...
 
 
 class Reranker(Protocol):
@@ -33,13 +33,16 @@ class SentenceTransformerEmbedder:
     def __init__(self, model_id: str, revision: str, device: str = "cuda") -> None:
         from sentence_transformers import SentenceTransformer
 
-        self.model = SentenceTransformer(model_id, revision=revision, device=device)
+        model_kwargs = {"dtype": "float16"} if device.startswith("cuda") else {}
+        self.model = SentenceTransformer(
+            model_id, revision=revision, device=device, model_kwargs=model_kwargs
+        )
 
-    def encode(self, texts: Sequence[str]) -> list[list[float]]:
+    def encode(self, texts: Sequence[str]) -> np.ndarray:
         vectors = self.model.encode(
             list(texts), normalize_embeddings=True, show_progress_bar=False, batch_size=16
         )
-        return np.asarray(vectors, dtype=np.float32).tolist()
+        return np.asarray(vectors, dtype=np.float32)
 
 
 class CrossEncoderReranker:

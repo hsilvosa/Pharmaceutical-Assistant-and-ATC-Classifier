@@ -54,6 +54,14 @@ def _quote(text: str, limit: int = 360) -> str:
     return quote[: boundary if boundary > 80 else limit]
 
 
+class GenerationError(ValueError):
+    """The generator never produced valid structured output; keeps the retrieved hits."""
+
+    def __init__(self, message: str, hits: Sequence[SearchHit]) -> None:
+        super().__init__(message)
+        self.hits = list(hits)
+
+
 class RagService:
     def __init__(
         self,
@@ -152,7 +160,10 @@ class RagService:
             )
 
         generation_started = time.perf_counter()
-        generated = self._generate_validated(request.question, language, hits)
+        try:
+            generated = self._generate_validated(request.question, language, hits)
+        except ValueError as exc:
+            raise GenerationError(str(exc), hits) from exc
         generation_ms = (time.perf_counter() - generation_started) * 1000
         citations = self._citations(generated, hits)
         status = AnswerStatus(generated.status)

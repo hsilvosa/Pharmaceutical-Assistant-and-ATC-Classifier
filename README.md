@@ -44,7 +44,13 @@ The repository combines the existing ATC models with a grounded CIMA retrieval s
 | BETO ATC Hierarchical Classifier | `dccuchile/bert-base-spanish-wwm-cased` | Top-3 Accuracy | 98.6% | `text-classification` |
 | BETO ATC Hierarchical Classifier | `dccuchile/bert-base-spanish-wwm-cased` | Micro F1 Score | 0.942 | `text-classification` |
 | BETO ATC Hierarchical Classifier | `dccuchile/bert-base-spanish-wwm-cased` | Macro F1 Score | 0.915 | `text-classification` |
-| CIMA RAG | `BAAI/bge-m3` + Qwen3 8B GGUF | Full pinned benchmark | Pending first GPU run | `retrieval-augmented-generation` |
+| CIMA RAG | `BAAI/bge-m3` + Qwen3 8B GGUF | Recall@5 (300 cases) | 90.8% (gate ≥ 85%: pass) | `retrieval-augmented-generation` |
+| CIMA RAG | `BAAI/bge-m3` + Qwen3 8B GGUF | MRR | 1.000 (gate ≥ 0.75: pass) | `retrieval-augmented-generation` |
+| CIMA RAG | `BAAI/bge-m3` + Qwen3 8B GGUF | Citation precision / coverage | 0.867 / 0.870 (gate ≥ 0.95: **fail**) | `retrieval-augmented-generation` |
+| CIMA RAG | `BAAI/bge-m3` + Qwen3 8B GGUF | Answer F1 | 0.034 (gate ≥ 0.85: **fail**) | `retrieval-augmented-generation` |
+| CIMA RAG | `BAAI/bge-m3` + Qwen3 8B GGUF | Refusal accuracy | 0.800 (gate ≥ 0.90: **fail**) | `retrieval-augmented-generation` |
+
+The RAG rows come from the first full GPU run (2026-10-08, `eval/baseline.json`): retrieval passes its gates, generation and citation gates do not. Main causes: (1) 83% of the benchmark's generated questions ask for catalogue fields (ATC code, pharmaceutical form, marketed status, prescription, ingredients, routes) whose expected values come from structured tables, but the index only contains leaflet and technical-sheet text, so the model often cannot cite them; (2) 39 of 300 generations (13%) returned invalid JSON twice and count as failures; (3) `answer_f1` is a token overlap against short expected values, which verbose answers score near zero even when correct. Thresholds were left unchanged.
 
 ---
 
@@ -142,8 +148,10 @@ For the local generator, download the locked GGUF file and start `llama.cpp` wit
 
 ```bash
 hf download Qwen/Qwen3-8B-GGUF Qwen3-8B-Q4_K_M.gguf --revision 7c41481f57cb95916b40956ab2f0b139b296d974 --local-dir models/qwen3
-llama-server -m models/qwen3/Qwen3-8B-Q4_K_M.gguf --host 127.0.0.1 --port 8080 --ctx-size 16384 --n-gpu-layers 99 --jinja
+llama-server -m models/qwen3/Qwen3-8B-Q4_K_M.gguf --host 127.0.0.1 --port 8080 --ctx-size 8192 --parallel 1 --n-gpu-layers 99 --jinja
 ```
+
+On a 12 GB GPU, `--parallel 1 --ctx-size 8192` is needed: with the default four slots at 16384 the model, reranker and embedder overflow VRAM and generation drops to about 8 tokens/s.
 
 Generate and run the 250 deterministic questions together with the 50 reviewed safety and retrieval cases:
 
@@ -165,7 +173,7 @@ python export_hf.py --upload --repo-id YOUR_USERNAME/BETO-ATC-Hierarchical-Class
 
 - Extend the ATC classifier from level 1 to the full five-level hierarchy (levels 2–5 are already in `atc_dataset.parquet`), for example with one head per level or hierarchical decoding.
 - Re-run `python -m src.evaluate` against the trained checkpoint on the held-out validation split and commit `evaluation_report.json`; the saved report predates the trained model.
-- Run the full pinned CIMA RAG benchmark on GPU and fill in its row above.
+- Make the CIMA RAG pass its generation gates: index the structured catalogue fields (ATC, form, marketed, prescription, ingredients, routes) as citable passages, fix the invalid-JSON generations, and score `answer_f1` on whether expected values appear in the answer.
 
 ## Medical Disclaimer
 
