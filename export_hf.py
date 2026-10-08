@@ -44,33 +44,14 @@ tags:
 datasets:
 - hsilvosa/aemps-cima
 - hsilvosa/openplacsp
-metrics:
-- f1
-- accuracy
 pipeline_tag: text-classification
-model-index:
-- name: BETO-ATC-Hierarchical-Classifier
-  results:
-  - task:
-      type: text-classification
-      name: ATC Taxonomy Classification
-    dataset:
-      name: AEMPS CIMA Research Dataset
-      type: hsilvosa/aemps-cima
-    metrics:
-    - type: accuracy
-      value: 0.948
-      name: Top-1 Accuracy
-    - type: f1
-      value: 0.942
-      name: Micro F1
 ---
 
-# BETO ATC Hierarchical Classifier
+# BETO ATC Classifier (not trained yet)
 
-This model is a multi-label transformer encoder based on [`dccuchile/bert-base-spanish-wwm-cased`](https://huggingface.co/dccuchile/bert-base-spanish-wwm-cased) (BETO) fine-tuned on the official **AEMPS CIMA Research Dataset** (`hsilvosa/aemps-cima`) and integrated with procurement metadata from (`hsilvosa/openplacsp`).
+> **Status: untrained.** These weights are [`dccuchile/bert-base-spanish-wwm-cased`](https://huggingface.co/dccuchile/bert-base-spanish-wwm-cased) (BETO) with a randomly initialised ATC level-1 classification head. They have not been fine-tuned and no evaluation result is reported. Measured top-1 accuracy of this checkpoint on 1,000 validation samples was 2.0%, below the 7.1% chance level. Do not use it for predictions.
 
-Given a drug description, active ingredients, dosage form, or patient leaflet snippet in Spanish, it predicts its 5-level **ATC (Anatomical Therapeutic Chemical)** code taxonomy classification.
+The intended model is a single-label classifier fine-tuned on the **AEMPS CIMA Research Dataset** (`hsilvosa/aemps-cima`) that maps a Spanish drug description, active ingredients, dosage form, or leaflet snippet to its **ATC (Anatomical Therapeutic Chemical)** level-1 anatomical group. Training code: `src/train_atc_classifier.py`.
 
 ## Intended Use & Disclaimer
 
@@ -112,11 +93,11 @@ datasets:
 pipeline_tag: text-generation
 ---
 
-# CIMA Spanish Medical Llama (LoRA)
+# CIMA Spanish Medical Llama (LoRA) (not trained yet)
 
-Fine-tuned small language model adapter (`meta-llama/Llama-3.2-3B-Instruct` or `microsoft/Phi-3.5-mini-instruct`) trained on Spanish Patient Leaflets (Prospectos) and Summaries of Product Characteristics (Fichas Técnicas) from the **AEMPS CIMA Research Dataset** (`hsilvosa/aemps-cima`) and (`hsilvosa/openplacsp`).
+> **Status: untrained placeholder.** All LoRA B matrices in this adapter are zero, so it changes nothing: the model behaves exactly like the base model `meta-llama/Llama-3.2-3B-Instruct`. No evaluation result is reported.
 
-Acts as a grounded Spanish medical QA assistant for active ingredients, administration routes, side effects, contraindications, and excipient safety warnings.
+The intended adapter is a QLoRA fine-tune on Spanish Patient Leaflets (Prospectos) and Summaries of Product Characteristics (Fichas Técnicas) from the **AEMPS CIMA Research Dataset** (`hsilvosa/aemps-cima`), aimed at Spanish pharmaceutical question answering. Training code: `src/train_medical_llm.py`.
 
 ## Usage
 

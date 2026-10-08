@@ -1,6 +1,6 @@
 # Spanish Pharmaceutical Assistant and ATC Classifier
 
-A machine learning and natural language processing system for Spanish pharmaceutical information and Anatomical Therapeutic Chemical (ATC) classification (currently the first, anatomical level), trained on official Spanish Agencia Española de Medicamentos y Productos Sanitarios (AEMPS) datasets.
+A machine learning and natural language processing system for Spanish pharmaceutical information and Anatomical Therapeutic Chemical (ATC) classification (currently the first, anatomical level), built on official Spanish Agencia Española de Medicamentos y Productos Sanitarios (AEMPS) datasets. **Status:** the grounded CIMA RAG is evaluated and working; the ATC classifier and the medical LLM adapter are *not yet trained* (see [Model status](#model-status)).
 
 ---
 
@@ -21,10 +21,10 @@ This project leverages two open research datasets:
 The repository combines the existing ATC models with a grounded CIMA retrieval system:
 
 1. **BETO ATC Hierarchical Classifier** (`text-classification`):  
-   Transformer encoder built on `dccuchile/bert-base-spanish-wwm-cased` (BETO); `PlanTL-GOB-ES/roberta-base-biomedical-clinical-es` is configured as an alternative. It accepts Spanish drug descriptions, active ingredients, dosage forms, or clinical text snippets and predicts the ATC level-1 anatomical group (single-label). Levels 2–5 are already extracted during preprocessing; training on them is listed under Next Steps.
+   Transformer encoder built on `dccuchile/bert-base-spanish-wwm-cased` (BETO); `PlanTL-GOB-ES/roberta-base-biomedical-clinical-es` is configured as an alternative. It accepts Spanish drug descriptions, active ingredients, dosage forms, or clinical text snippets and predicts the ATC level-1 anatomical group (single-label). Levels 2–5 are already extracted during preprocessing; training on them is listed under Next Steps. **Not trained yet:** the weights in `models/atc_classifier` are the BETO base model with a randomly initialised classification head (see [Model status](#model-status)).
 
 2. **CIMA Spanish Medical LLM** (`text-generation` / `causal-lm`):  
-   Instruction fine-tuned small language model (`meta-llama/Llama-3.2-3B-Instruct` / `microsoft/Phi-3.5-mini-instruct`) trained using 4-bit QLoRA on Spanish patient leaflets and product technical sheets.
+   Instruction fine-tuned small language model (`meta-llama/Llama-3.2-3B-Instruct` / `microsoft/Phi-3.5-mini-instruct`) intended to be trained with 4-bit QLoRA on Spanish patient leaflets and product technical sheets (`src/train_medical_llm.py`). **Not trained yet:** the adapter in `models/cima_medical_llama` is an untrained placeholder whose LoRA B matrices are all zero, so it behaves exactly like the base model (see [Model status](#model-status)).
 
 3. **Grounded CIMA RAG**:
    A section-level hybrid retrieval pipeline over a pinned `HSilvosa/aemps-cima` release. It combines BGE-M3 dense search, Spanish full-text search, reciprocal-rank fusion, multilingual reranking, and local Qwen3 generation through `llama.cpp`. Every factual answer must cite an exact quotation and official AEMPS URL.
@@ -40,16 +40,24 @@ The repository combines the existing ATC models with a grounded CIMA retrieval s
 
 | Model Component | Base Architecture | Evaluation Metric | Score | Pipeline Tag |
 |---|---|---|---|---|
-| BETO ATC Hierarchical Classifier | `dccuchile/bert-base-spanish-wwm-cased` | Top-1 Accuracy | 94.8% | `text-classification` |
-| BETO ATC Hierarchical Classifier | `dccuchile/bert-base-spanish-wwm-cased` | Top-3 Accuracy | 98.6% | `text-classification` |
-| BETO ATC Hierarchical Classifier | `dccuchile/bert-base-spanish-wwm-cased` | Micro F1 Score | 0.942 | `text-classification` |
-| BETO ATC Hierarchical Classifier | `dccuchile/bert-base-spanish-wwm-cased` | Macro F1 Score | 0.915 | `text-classification` |
+| BETO ATC classifier (**untrained**, random head) | `dccuchile/bert-base-spanish-wwm-cased` | Top-1 Accuracy (1,000 samples) | 2.0% (chance 7.1%) | `text-classification` |
+| BETO ATC classifier (**untrained**, random head) | `dccuchile/bert-base-spanish-wwm-cased` | Top-3 Accuracy (1,000 samples) | 29.0% | `text-classification` |
 | CIMA RAG | `BAAI/bge-m3` + Qwen3 8B GGUF | Recall@5 / MRR (300 cases) | 1.000 / 1.000 | `retrieval-augmented-generation` |
 | CIMA RAG | `BAAI/bge-m3` + Qwen3 8B GGUF | Citation precision / coverage | 0.990 / 0.997 | `retrieval-augmented-generation` |
 | CIMA RAG | `BAAI/bge-m3` + Qwen3 8B GGUF | Answer recall (expected values) | 0.977 | `retrieval-augmented-generation` |
 | CIMA RAG | `BAAI/bge-m3` + Qwen3 8B GGUF | Refusal accuracy | 1.000 | `retrieval-augmented-generation` |
 
 The RAG rows come from the full GPU run recorded in `eval/baseline.json` (2026-10-08, 300 cases, all six release gates pass). Read them with these caveats: 250 of the 300 cases are catalogue lookups (ATC, pharmaceutical form, marketed status, prescription, ingredients, routes) and only 11 exercise leaflet or technical-sheet text, so the result says little about free-text question answering. `answer_recall` is the fraction of expected value tokens found in the answer (yes/no read from the first words, an ATC code counts when the answer gives a longer code that starts with it); it replaced a token F1 that scored correct but verbose answers near zero. Catalogue fields are indexed as one citable passage per medicine (`Datos de catalogo AEMPS`). The first run, before these changes, failed four gates (answer F1 0.034, citation precision 0.867, citation coverage 0.870, refusal accuracy 0.800) because the index lacked those fields, Qwen3 reasoning exhausted the token budget (39 invalid generations), and the model omitted inline `[C#]` markers. The same run exposed a safety bug: the personalised-dosing filter missed accented questions such as ¿Cuánto debo tomar…?. Thresholds were never changed.
+
+### Model status
+
+Checked on 2026-10-08:
+
+- **ATC classifier: not trained.** `models/atc_classifier/model.safetensors` was written by `export_hf.py` from the BETO base model with a freshly initialised classification head. `src/train_atc_classifier.py` saves its result to `models/atc_classifier/final_model`, and that folder does not exist. The two rows above are the measured accuracy of those exported weights on 1,000 validation samples (`data/processed/evaluation_report.json` records 10.6% from an earlier run of the same untrained model). Earlier versions of this README and of the generated model card listed 94.8% / 98.6% / 0.942 / 0.915; those numbers did not come from any evaluation and have been removed. Until the model is trained, the ATC tab of the Streamlit app returns predictions from the untrained model and should not be trusted.
+- **Medical LLM adapter: not trained.** `export_hf.py` creates `adapter_model.safetensors` with zero LoRA B matrices (112 of 112 are zero), which is a no-op on top of `meta-llama/Llama-3.2-3B-Instruct`. No result is reported for it.
+- **Grounded CIMA RAG: evaluated.** Uses pretrained `BAAI/bge-m3`, `BAAI/bge-reranker-v2-m3` and Qwen3-8B without fine-tuning; results above.
+
+If you published these artifacts to the Hugging Face Hub, their model cards carry the same removed numbers and training claims and need the same correction.
 
 ---
 
@@ -171,7 +179,9 @@ python export_hf.py --upload --repo-id YOUR_USERNAME/BETO-ATC-Hierarchical-Class
 ## Next Steps
 
 - Extend the ATC classifier from level 1 to the full five-level hierarchy (levels 2–5 are already in `atc_dataset.parquet`), for example with one head per level or hierarchical decoding.
-- Re-run `python -m src.evaluate` against the trained checkpoint on the held-out validation split and commit `evaluation_report.json`; the saved report predates the trained model.
+- Train the ATC classifier (`python -m src.train_atc_classifier`, about 25–60 minutes on a 12 GB GPU by estimate), then run `python -m src.evaluate` and commit the real `evaluation_report.json`. `src/evaluate.py` and `src/inference.py` load `models/atc_classifier/final_model` and silently fall back to an untrained model when it is missing; make them fail loudly instead.
+- Train the medical LLM adapter (`python -m src.train_medical_llm`) and evaluate it before reporting any result for it.
+- Replace the metrics and training claims in the model cards generated by `export_hf.py` once real results exist.
 - Broaden the RAG benchmark with more leaflet and technical-sheet questions (only 11 of 300 cases today) and add a per-section quality review of the generated answers.
 
 ## Medical Disclaimer
