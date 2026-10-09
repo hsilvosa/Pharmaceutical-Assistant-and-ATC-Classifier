@@ -14,6 +14,7 @@ from .evaluation import (
     compare_baseline,
     evaluate,
     generate_benchmark,
+    generate_section_benchmark,
     load_benchmark,
     write_benchmark,
     write_report,
@@ -45,6 +46,11 @@ def _parser() -> argparse.ArgumentParser:
     evaluation = commands.add_parser("evaluate")
     evaluation.add_argument("--benchmark", type=Path, action="append")
     evaluation.add_argument("--generate", action="store_true")
+    evaluation.add_argument(
+        "--generate-sections",
+        action="store_true",
+        help="Write eval/sections.jsonl (leaflet and technical-sheet questions) and exit.",
+    )
     evaluation.add_argument("--local-data", type=Path)
     evaluation.add_argument("--output", type=Path)
 
@@ -108,6 +114,12 @@ def _serve(args: argparse.Namespace) -> int:
 
 def _evaluate(args: argparse.Namespace) -> int:
     settings = _settings(development=bool(args.local_data), local_data_dir=args.local_data)
+    if args.generate_sections:
+        source = _source(settings, args.local_data)
+        items = generate_section_benchmark(source)
+        write_benchmark(Path("eval/sections.jsonl"), items)
+        print(f"Wrote {len(items)} section questions to eval/sections.jsonl")
+        return 0
     paths = args.benchmark or [Path("eval/generated.jsonl"), Path("eval/curated.jsonl")]
     if args.generate:
         source = _source(settings, args.local_data)

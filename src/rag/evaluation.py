@@ -112,6 +112,113 @@ def generate_benchmark(source: SourceData, count: int = 250) -> list[BenchmarkIt
     return items
 
 
+# (document_type, section) -> (category, Spanish question, English question)
+SECTION_SPECS = {
+    (1, "4.1"): ("ft_indications", "¿Cuáles son las indicaciones terapéuticas de {m} según su ficha técnica?", "What therapeutic indications does the technical sheet of {m} list?"),
+    (1, "4.2"): ("ft_posology", "¿Qué posología y forma de administración recoge la ficha técnica de {m}?", "What posology and method of administration does the technical sheet of {m} give?"),
+    (1, "4.3"): ("ft_contraindications", "¿Qué contraindicaciones recoge la ficha técnica de {m}?", "What contraindications does the technical sheet of {m} list?"),
+    (1, "4.5"): ("ft_interactions", "¿Qué interacciones con otros medicamentos describe la ficha técnica de {m}?", "What drug interactions does the technical sheet of {m} describe?"),
+    (1, "4.8"): ("ft_adverse_reactions", "¿Qué reacciones adversas describe la ficha técnica de {m}?", "What adverse reactions does the technical sheet of {m} describe?"),
+    (1, "4.9"): ("ft_overdose", "¿Qué dice la ficha técnica de {m} sobre la sobredosis?", "What does the technical sheet of {m} say about overdose?"),
+    (1, "6.4"): ("ft_storage", "¿Qué precauciones de conservación indica la ficha técnica de {m}?", "What storage precautions does the technical sheet of {m} indicate?"),
+    (2, "1"): ("leaflet_use", "¿Para qué se utiliza {m} según el prospecto?", "What is {m} used for according to the leaflet?"),
+    (2, "2"): ("leaflet_before_taking", "¿Qué debo saber antes de tomar {m} según el prospecto?", "What should I know before taking {m} according to the leaflet?"),
+    (2, "3"): ("leaflet_how_to_take", "¿Cómo se toma {m} según el prospecto?", "How is {m} taken according to the leaflet?"),
+    (2, "4"): ("leaflet_side_effects", "¿Qué efectos adversos menciona el prospecto de {m}?", "What side effects does the leaflet of {m} mention?"),
+    (2, "5"): ("leaflet_storage", "¿Cómo debe conservarse {m} según el prospecto?", "How should {m} be stored according to the leaflet?"),
+}
+_MIN_SECTION_CHARS = 250
+_LEAD_CHARS = 900
+_MIN_TERM_FREQUENCY = 3
+
+
+def generate_section_benchmark(source: SourceData, count: int = 120, terms: int = 4) -> list[BenchmarkItem]:
+    """Build leaflet and technical-sheet questions with checkable evidence terms.
+
+    For each sampled medicine and section, the expected values are the rarest words of the
+    first part of that section (the part most likely to be retrieved first). They are not
+    in the question or the medicine name. A good grounded answer should repeat some of them,
+    so ``answer_recall`` measures how much of the source section reaches the answer.
+    """
+    medications = source.rows("medications")
+    names = {str(r["registration_number"]): str(r.get("name") or "") for r in medications}
+    registrations = sorted(r for r, n in names.items() if n)
+    pool = set(
+        sorted(registrations, key=lambda r: hashlib.sha256(f"42|sec|{r}".encode()).hexdigest())[:1500]
+    )
+    sections: dict[tuple[str, int, str], str] = {}
+    for row in source.iter_rows("documents"):
+        key = (int(row.get("document_type") or 0), str(row.get("section") or ""))
+        registration = str(row["registration_number"])
+        if key not in SECTION_SPECS or registration not in pool:
+            continue
+        text = str(row.get("content_text") or "").strip()
+        if len(text) >= _MIN_SECTION_CHARS:
+            sections.setdefault((registration, *key), text)
+
+    document_frequency: dict[tuple[int, str, str], int] = defaultdict(int)
+    token_cache: dict[tuple[str, int, str], list[str]] = {}
+    for key, text in sections.items():
+        tokens = _tokens(text[:_LEAD_CHARS])
+        token_cache[key] = tokens
+        for token in set(tokens):
+            document_frequency[(key[1], key[2], token)] += 1
+
+    candidates = []
+    for (registration, doc_type, section), tokens in token_cache.items():
+        name_tokens = set(_tokens(names[registration]))
+        seen, picked = set(), []
+        # Words used in at least 3 sections of the same kind are real domain terms.
+        # Words used only once are often typos or product-specific noise.
+        def frequency(token: str) -> int:
+            return document_frequency[(doc_type, section, token)]
+
+        for token in sorted(tokens, key=lambda t: (frequency(t), t)):
+            if (
+                token in seen
+                or token in name_tokens
+                or len(token) < 7
+                or not token.isalpha()
+                or frequency(token) < _MIN_TERM_FREQUENCY
+            ):
+                continue
+            seen.add(token)
+            picked.append(token)
+            if len(picked) == terms:
+                break
+        if len(picked) == terms:
+            candidates.append((registration, doc_type, section, picked))
+    candidates.sort(key=lambda c: hashlib.sha256(f"42|{c[0]}|{c[1]}|{c[2]}".encode()).hexdigest())
+
+    per_category: dict[str, int] = defaultdict(int)
+    cap = max(1, math.ceil(count / len(SECTION_SPECS)))
+    items = []
+    for registration, doc_type, section, picked in candidates:
+        category, es, en = SECTION_SPECS[(doc_type, section)]
+        if per_category[category] >= cap or len(items) >= count:
+            continue
+        per_category[category] += 1
+        # Evidence terms come from the Spanish source text, so questions are Spanish.
+        # Bilingual behaviour is covered by the curated benchmark.
+        language = "es"
+        medicine = names[registration]
+        items.append(
+            BenchmarkItem(
+                id=f"section-{len(items) + 1:03d}",
+                split=_split(registration),
+                category=category,
+                language=language,
+                question=es.format(m=medicine),
+                registration_number=registration,
+                relevant_registration_numbers=[registration],
+                expected_values=picked,
+                expected_status=AnswerStatus.ANSWERED,
+                metadata={"document_type": doc_type, "section": section},
+            )
+        )
+    return items
+
+
 def load_benchmark(paths: Sequence[Path]) -> list[BenchmarkItem]:
     items = []
     for path in paths:
@@ -197,6 +304,23 @@ def _mean(values: Sequence[float]) -> float:
     return sum(values) / len(values) if values else 0.0
 
 
+def _section_rank(item: BenchmarkItem, hits: Sequence) -> int | None:
+    """Rank of the first hit from the expected medicine, document type and section."""
+    wanted = item.metadata.get("section")
+    if wanted is None:
+        return None
+    relevant = set(item.relevant_registration_numbers)
+    for rank, hit in enumerate(hits, start=1):
+        chunk = hit.chunk
+        if (
+            chunk.registration_number in relevant
+            and chunk.document_type == item.metadata.get("document_type")
+            and chunk.section.split(".")[:2] == str(wanted).split(".")[:2]
+        ):
+            return rank
+    return None
+
+
 def _generation_error_case(item: BenchmarkItem, hits: Sequence) -> dict:
     relevant = set(item.relevant_registration_numbers)
     ranks = [
@@ -215,6 +339,7 @@ def _generation_error_case(item: BenchmarkItem, hits: Sequence) -> dict:
         "citation_ids": [],
         "retrieved": [hit.chunk.chunk_id for hit in hits],
         "first_relevant_rank": min(ranks) if ranks else None,
+        "section_rank": _section_rank(item, hits),
         "answer_recall": 0.0 if item.expected_values else None,
         "citation_precision": 0.0,
         "citation_coverage": 0.0,
@@ -255,6 +380,7 @@ def evaluate(service: RagService, items: Sequence[BenchmarkItem]) -> dict:
             if hit.chunk.registration_number in relevant
         ]
         first_rank = min(ranks) if ranks else None
+        section_rank = _section_rank(item, hits)
         citation_correct = [
             citation.registration_number in relevant for citation in response.citations
         ]
@@ -270,6 +396,7 @@ def evaluate(service: RagService, items: Sequence[BenchmarkItem]) -> dict:
                 "citation_ids": [citation.chunk_id for citation in response.citations],
                 "retrieved": [hit.chunk.chunk_id for hit in hits],
                 "first_relevant_rank": first_rank,
+                "section_rank": section_rank,
                 "answer_recall": _answer_recall(response.answer, item.expected_values),
                 "citation_precision": _mean([float(value) for value in citation_correct])
                 if citation_correct
@@ -324,6 +451,26 @@ def evaluate(service: RagService, items: Sequence[BenchmarkItem]) -> dict:
         "peak_gpu_memory_mb": peak_gpu_mb,
     }
     gates = {name: metrics[name] >= threshold for name, threshold in THRESHOLDS.items()}
+    by_category = {}
+    for category in sorted({case["category"] for case in cases}):
+        group = [case for case in cases if case["category"] == category]
+        scores = [case["answer_recall"] for case in group if case["answer_recall"] is not None]
+        by_category[category] = {
+            "cases": len(group),
+            "status_accuracy": round(_mean([float(case["status_correct"]) for case in group]), 4),
+            "answer_recall": round(_mean(scores), 4) if scores else None,
+            "citation_precision": round(_mean([case["citation_precision"] for case in group]), 4),
+        }
+        if any("section_rank" in case for case in group):
+            by_category[category]["section_recall_at_5"] = round(
+                _mean(
+                    [
+                        float(case.get("section_rank") is not None and case["section_rank"] <= 5)
+                        for case in group
+                    ]
+                ),
+                4,
+            )
     return {
         "status": "pass" if all(gates.values()) else "fail",
         "generated_at": datetime.now(UTC).isoformat(),
@@ -332,6 +479,7 @@ def evaluate(service: RagService, items: Sequence[BenchmarkItem]) -> dict:
         "metrics": metrics,
         "thresholds": THRESHOLDS,
         "gates": gates,
+        "by_category": by_category,
         "cases": cases,
     }
 

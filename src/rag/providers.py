@@ -108,7 +108,8 @@ class LlamaCppGenerator:
             ],
             "temperature": 0.1,
             "seed": self.seed,
-            "max_tokens": 512,
+            # 512 tokens truncated the JSON for long sections (adverse reactions, interactions).
+            "max_tokens": 1024,
             "response_format": {"type": "json_object"},
             # Qwen3 otherwise spends the whole token budget on reasoning and returns no JSON.
             "chat_template_kwargs": {"enable_thinking": False},
