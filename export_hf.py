@@ -93,43 +93,64 @@ print(probs)
 LLM_MODEL_CARD = """---
 language:
 - es
-license: apache-2.0
+license: other
+base_model: Qwen/Qwen2.5-3B-Instruct
+library_name: peft
 tags:
-- text-generation
-- causal-lm
 - lora
 - qlora
 - spanish
-- medical
 - pharmacology
 - aemps-cima
 datasets:
 - hsilvosa/aemps-cima
-- hsilvosa/openplacsp
 pipeline_tag: text-generation
 ---
 
-# CIMA Spanish Medical Llama (LoRA) (not trained yet)
+# CIMA Spanish Pharmaceutical QA LoRA Adapter (format adapter, not a knowledge source)
 
-> **Status: untrained placeholder.** All LoRA B matrices in this adapter are zero, so it changes nothing: the model behaves exactly like the base model `meta-llama/Llama-3.2-3B-Instruct`. No evaluation result is reported.
+QLoRA adapter (r=16, 4-bit NF4) for [`Qwen/Qwen2.5-3B-Instruct`](https://huggingface.co/Qwen/Qwen2.5-3B-Instruct), trained for one epoch on 15,000 templated question-answer pairs built from AEMPS CIMA catalogue fields. Use is subject to the base model licence (Qwen research licence). Training code: `src/train_medical_llm.py`.
 
-The intended adapter is a QLoRA fine-tune on Spanish Patient Leaflets (Prospectos) and Summaries of Product Characteristics (Fichas Técnicas) from the **AEMPS CIMA Research Dataset** (`hsilvosa/aemps-cima`), aimed at Spanish pharmaceutical question answering. Training code: `src/train_medical_llm.py`.
+## What it does
+
+The three question templates ask about composition, dosage form and route, and excipients of a named medicine. The adapter learns the answer format and common name-to-ingredient associations. It does not learn reliable facts about medicines.
+
+## Evaluation
+
+Held-out set: the first {n_heldout_rows} rows (about 100 medicines) of a 300-medicine split never used in training. The prompt contains only the medicine name. A field counts as correct when the generated answer contains the reference catalogue value ({n_fields} fields).
+
+| Field | Base model | With adapter |
+|---|---|---|
+| Overall | {base_overall:.1%} | {tuned_overall:.1%} |
+| Active ingredient | {base_active_ingredient:.1%} | {tuned_active_ingredient:.1%} |
+| Dosage form | {base_form:.1%} | {tuned_form:.1%} |
+| Route | {base_route:.1%} | {tuned_route:.1%} |
+| Prescription status | {base_prescription:.1%} | {tuned_prescription:.1%} |
+| First excipient | {base_first_excipient:.1%} | {tuned_first_excipient:.1%} |
+
+Limits:
+- The gain is mostly format: the base model does not state prescription status or the exact catalogue wording.
+- 83% of the held-out active-ingredient strings also appear in training under other brands of the same drug, so the ingredient score reflects learned name-to-ingredient associations, not knowledge of unseen drugs.
+- Excipient lists and doses for a specific product are often wrong. For example, the adapter invents excipient quantities.
+- One training run and one seed. No evaluation of leaflet text, safety, or free-form questions.
+
+## Intended use & disclaimer
+
+Research and education only. Not medical advice. Do not use it as a source of facts about medicines. Factual answers must come from retrieval with citations to official AEMPS documents (see the grounded RAG in the project repository).
 
 ## Usage
 
 ```python
-from transformers import AutoTokenizer, AutoModelForCausalLM
+from transformers import AutoModelForCausalLM, AutoTokenizer
 from peft import PeftModel
 
-base_model = "meta-llama/Llama-3.2-3B-Instruct"
-tokenizer = AutoTokenizer.from_pretrained(base_model)
-model = AutoModelForCausalLM.from_pretrained(base_model, torch_dtype="auto", device_map="auto")
-model = PeftModel.from_pretrained(model, "your-hf-username/CIMA-Spanish-Medical-Llama-LoRA")
+base = AutoModelForCausalLM.from_pretrained("Qwen/Qwen2.5-3B-Instruct", device_map="auto")
+tok = AutoTokenizer.from_pretrained("Qwen/Qwen2.5-3B-Instruct")
+model = PeftModel.from_pretrained(base, "your-hf-username/CIMA-Spanish-Medical-LoRA")
 
-prompt = "<|system|>\nEres un asistente médico farmacéutico...\n<|user|>\n¿Cuál es la vía de administración y composición de Omeprazol?\n<|assistant|>\n"
-inputs = tokenizer(prompt, return_tensors="pt").to("cuda")
-outputs = model.generate(**inputs, max_new_tokens=150)
-print(tokenizer.decode(outputs[0], skip_special_tokens=True))
+msgs = [{{"role": "user", "content": "¿Cómo debe administrarse OMEPRAZOL CINFA 20 MG CAPSULAS y cuál es su vía de administración?"}}]
+ids = tok.apply_chat_template(msgs, add_generation_prompt=True, return_tensors="pt").to(model.device)
+print(tok.decode(model.generate(ids, max_new_tokens=120)[0], skip_special_tokens=True))
 ```
 """
 
@@ -165,6 +186,37 @@ def export_trained_atc(atc_dir: Path) -> Path:
     return out
 
 
+def export_trained_llm(llm_dir: Path) -> Path:
+    """Copy the trained LoRA adapter and a metrics-based model card to a clean staging folder.
+
+    Refuses to export when the trained adapter or its evaluation is missing.
+    """
+    adapter = llm_dir / "final_adapter"
+    eval_path = llm_dir / "eval_final_adapter.json"
+    if not adapter.exists():
+        raise FileNotFoundError(
+            f"Trained adapter not found at '{adapter}'. Run 'python -m src.train_medical_llm' first."
+        )
+    if not eval_path.exists():
+        raise FileNotFoundError(
+            f"Evaluation '{eval_path}' not found. Run 'python -m src.evaluate_medical_llm' first."
+        )
+    with open(eval_path, "r", encoding="utf-8") as f:
+        ev = json.load(f)
+    values = {"n_heldout_rows": ev["n_heldout_rows"], "n_fields": ev["base_model"]["n_fields"]}
+    for key in ("overall", "active_ingredient", "form", "route", "prescription", "first_excipient"):
+        values[f"base_{key}"] = ev["base_model"][key]
+        values[f"tuned_{key}"] = ev["fine_tuned"][key]
+
+    out = llm_dir / ATC_EXPORT_DIRNAME
+    if out.exists():
+        shutil.rmtree(out)
+    shutil.copytree(adapter, out, ignore=shutil.ignore_patterns("README.md", "checkpoint-*"))
+    (out / "README.md").write_text(LLM_MODEL_CARD.format(**values).strip() + "\n", encoding="utf-8")
+    logger.info(f"Medical LLM export complete at '{out}'")
+    return out
+
+
 def prepare_hf_export():
     """Package complete model artifacts (weights, adapters, configs, tokenizers, model cards) for Hugging Face Hub."""
     logger.info("Exporting complete Hugging Face model artifacts...")
@@ -193,64 +245,16 @@ def prepare_hf_export():
 
     export_trained_atc(atc_dir)
 
-    # 2. Export CIMA Medical LLM LoRA Adapter Weights & Config
-    llm_dir = Path(LLM_MODEL_DIR)
-    llm_dir.mkdir(parents=True, exist_ok=True)
-    
-    logger.info(f"Exporting CIMA Medical LLM LoRA weights & adapter files to '{llm_dir}'...")
-    
-    adapter_config = {
-        "auto_mapping": None,
-        "base_model_name_or_path": LLM_BASE_MODEL,
-        "bias": "none",
-        "fan_in_fan_out": False,
-        "inference_mode": True,
-        "init_lora_weights": True,
-        "layers_pattern": None,
-        "layers_to_transform": None,
-        "lora_alpha": 32,
-        "lora_dropout": 0.05,
-        "modules_to_save": None,
-        "peft_type": "LORA",
-        "r": 16,
-        "target_modules": ["q_proj", "v_proj", "k_proj", "o_proj"],
-        "task_type": "CAUSAL_LM"
-    }
-    
-    with open(llm_dir / "adapter_config.json", "w", encoding="utf-8") as f:
-        json.dump(adapter_config, f, indent=2)
+    # 2. Export CIMA Medical LLM LoRA adapter
+    export_trained_llm(Path(LLM_MODEL_DIR))
 
-    # Generate and save PEFT LoRA adapter weight tensors (adapter_model.safetensors)
-    lora_tensors = {}
-    r = 16
-    hidden_dim = 3072
-    num_layers = 28
-    
-    for i in range(num_layers):
-        for module in ["q_proj", "v_proj", "k_proj", "o_proj"]:
-            # LoRA A matrix: (r, hidden_dim) initialized gaussian
-            lora_A = torch.randn((r, hidden_dim), dtype=torch.float32) * 0.02
-            # LoRA B matrix: (hidden_dim, r) initialized zero
-            lora_B = torch.zeros((hidden_dim, r), dtype=torch.float32)
-            
-            lora_tensors[f"base_model.model.model.layers.{i}.self_attn.{module}.lora_A.weight"] = lora_A
-            lora_tensors[f"base_model.model.model.layers.{i}.self_attn.{module}.lora_B.weight"] = lora_B
-
-    safetensors_path = llm_dir / "adapter_model.safetensors"
-    save_file(lora_tensors, str(safetensors_path))
-    logger.info(f"Generated and saved '{safetensors_path}' ({safetensors_path.stat().st_size / 1e6:.2f} MB)")
-
-    with open(llm_dir / "README.md", "w", encoding="utf-8") as f:
-        f.write(LLM_MODEL_CARD.strip())
-        
-    logger.info(f"Medical LLM export complete at '{llm_dir}'")
 
 def upload_to_huggingface(repo_id: str, model_type: str = "atc", token: str = None):
     """Upload complete model folder to Hugging Face Hub."""
     from huggingface_hub import HfApi
     
     api = HfApi(token=token or os.getenv("HF_TOKEN"))
-    folder_path = Path(ATC_MODEL_DIR) / ATC_EXPORT_DIRNAME if model_type == "atc" else Path(LLM_MODEL_DIR)
+    folder_path = (Path(ATC_MODEL_DIR) if model_type == "atc" else Path(LLM_MODEL_DIR)) / ATC_EXPORT_DIRNAME
     
     if not folder_path.exists():
         logger.error(f"Model folder '{folder_path}' does not exist.")
