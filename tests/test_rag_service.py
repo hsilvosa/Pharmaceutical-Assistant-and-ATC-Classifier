@@ -87,3 +87,32 @@ def test_invalid_generator_output_is_retried_and_rejected(fixture_components) ->
     with pytest.raises(ValueError, match="invalid structured output twice"):
         broken.query(QueryRequest(question="What are the contraindications?", language="en"))
 
+
+
+class TruncatedThenValidGenerator(Generator):
+    def __init__(self) -> None:
+        self.questions: list[str] = []
+
+    def generate(self, question, language, hits):
+        self.questions.append(question)
+        if len(self.questions) == 1:
+            return '{"status": "answered", "answer": "A very long list [C1], and'
+        return (
+            '{"status": "answered", "answer": "Short answer [C1].", '
+            '"citation_ids": ["C1"], "refusal_reason": ""}'
+        )
+
+
+def test_truncated_output_is_retried_with_a_brevity_request(fixture_components) -> None:
+    _, medicines, _, service = fixture_components
+    generator = TruncatedThenValidGenerator()
+    retrying = RagService(
+        service.retriever, EntityResolver(medicines), generator, "fixture-revision"
+    )
+    response = retrying.query(
+        QueryRequest(question="What are the contraindications?", language="en")
+    )
+    assert response.status != AnswerStatus.REFUSED
+    assert len(generator.questions) == 2
+    assert generator.questions[0] == "What are the contraindications?"
+    assert "at most 120 words" in generator.questions[1]

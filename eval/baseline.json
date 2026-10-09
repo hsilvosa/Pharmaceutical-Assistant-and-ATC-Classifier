@@ -1,24 +1,24 @@
 {
   "status": "pass",
   "source_revision": "05da2ddf387a47a274384084068462ad8e2ff908",
-  "generated_at": "2026-10-08T16:25:32.601932+00:00",
+  "generated_at": "2026-10-09T16:01:34.485743+00:00",
   "question_count": 300,
-  "report": "artifacts/evaluations/20261008T162532Z/report.json",
+  "report": "artifacts/evaluations/rerun-retry/report.json",
   "metrics": {
     "recall_at_5": 1.0,
     "recall_at_10": 1.0,
     "mrr": 1.0,
     "ndcg_at_10": 1.0,
-    "answer_recall": 0.9773,
+    "answer_recall": 0.9773333333333334,
     "citation_precision": 0.99,
     "citation_recall": 1.0,
-    "citation_coverage": 0.9967,
+    "citation_coverage": 1.0,
     "refusal_accuracy": 1.0,
     "ambiguity_accuracy": 1.0,
-    "generation_errors": 1.0,
-    "mean_latency_ms": 6576.4743,
-    "throughput_qps": 0.1466,
-    "peak_gpu_memory_mb": 4778.6455
+    "generation_errors": 0.0,
+    "mean_latency_ms": 6061.250318001646,
+    "throughput_qps": 0.1649797623177795,
+    "peak_gpu_memory_mb": 4778.6455078125
   },
   "thresholds": {
     "recall_at_5": 0.85,
@@ -36,5 +36,5 @@
     "answer_recall": true,
     "refusal_accuracy": true
   },
-  "note": "Full pinned GPU evaluation (RTX 3060; BAAI/bge-m3 + bge-reranker-v2-m3 + Qwen3-8B Q4_K_M, llama.cpp --ctx-size 8192 --parallel 1, thinking disabled). Index includes one catalogue passage per medicine. answer_recall replaced answer_f1 (see README). Thresholds unchanged."
+  "note": "Full pinned GPU evaluation (RTX 3060; BAAI/bge-m3 + bge-reranker-v2-m3 + Qwen3-8B Q4_K_M, llama.cpp --ctx-size 8192 --parallel 1, thinking disabled). Index includes one catalogue passage per medicine. answer_recall replaced answer_f1 (see README). Thresholds unchanged. Re-run on 2026-10-09 after the brevity retry: generation_errors 1 -> 0 (curated-030 now answers; it is a prompt-injection case that should not be answered, see README Next Steps)."
 }

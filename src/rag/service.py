@@ -57,6 +57,12 @@ def _quote(text: str, limit: int = 360) -> str:
     return quote[: boundary if boundary > 80 else limit]
 
 
+RETRY_BREVITY_NOTE = (
+    "\n\nIMPORTANT: the previous answer was too long and was cut off. Answer in at most 120 words. "
+    "For long lists, name the most important items and state that the list is not exhaustive."
+)
+
+
 class GenerationError(ValueError):
     """The generator never produced valid structured output; keeps the retrieved hits."""
 
@@ -198,8 +204,11 @@ class RagService:
         self, question: str, language: str, hits: Sequence[SearchHit]
     ) -> GeneratedAnswer:
         last_error: Exception | None = None
-        for _ in range(2):
-            raw = self.generator.generate(question, language, hits)
+        for attempt in range(2):
+            # A plain retry repeats the same output (the seed is fixed). A truncated JSON answer
+            # usually means the model listed every item, so the retry asks for a short answer.
+            prompt = question if attempt == 0 else question + RETRY_BREVITY_NOTE
+            raw = self.generator.generate(prompt, language, hits)
             try:
                 payload = json.loads(raw)
                 return GeneratedAnswer.model_validate(payload)

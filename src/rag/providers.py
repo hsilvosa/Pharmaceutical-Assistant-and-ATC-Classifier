@@ -108,7 +108,7 @@ class LlamaCppGenerator:
             ],
             "temperature": 0.1,
             "seed": self.seed,
-            # 512 tokens truncated the JSON for long sections (adverse reactions, interactions).
+            # Very long answers are cut off at this limit; the service retries with a brevity request.
             "max_tokens": 1024,
             "response_format": {"type": "json_object"},
             # Qwen3 otherwise spends the whole token budget on reasoning and returns no JSON.
