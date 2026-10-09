@@ -79,7 +79,7 @@ Intended only for medical research and pharmaceutical data analytics. Not for cl
 from transformers import AutoTokenizer, AutoModelForSequenceClassification
 import torch
 
-repo = "your-hf-username/BETO-ATC-Classifier"
+repo = "hsilvosa/BETO-ATC-Classifier"
 tokenizer = AutoTokenizer.from_pretrained(repo)
 model = AutoModelForSequenceClassification.from_pretrained(repo)
 
@@ -146,7 +146,7 @@ from peft import PeftModel
 
 base = AutoModelForCausalLM.from_pretrained("Qwen/Qwen2.5-3B-Instruct", device_map="auto")
 tok = AutoTokenizer.from_pretrained("Qwen/Qwen2.5-3B-Instruct")
-model = PeftModel.from_pretrained(base, "your-hf-username/CIMA-Spanish-Medical-LoRA")
+model = PeftModel.from_pretrained(base, "hsilvosa/CIMA-Spanish-Medical-Qwen-LoRA")
 
 msgs = [{{"role": "user", "content": "¿Cómo debe administrarse OMEPRAZOL CINFA 20 MG CAPSULAS y cuál es su vía de administración?"}}]
 ids = tok.apply_chat_template(msgs, add_generation_prompt=True, return_tensors="pt").to(model.device)
