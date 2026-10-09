@@ -28,13 +28,13 @@ ATC_EPOCHS = 4
 ATC_LR = 3e-5
 ATC_SEED = 42
 
-# Spanish Medical SLM/LLM Settings (Llama-3.2-3B / Phi-3.5-mini)
-LLM_BASE_MODEL = "meta-llama/Llama-3.2-3B-Instruct"
-LLM_FALLBACK_MODEL = "microsoft/Phi-3.5-mini-instruct"
-LLM_MAX_LENGTH = 512
-LLM_BATCH_SIZE = 4
-LLM_GRAD_ACC = 4
-LLM_EPOCHS = 3
+# Spanish Medical SLM/LLM Settings (Qwen2.5-3B-Instruct)
+LLM_BASE_MODEL = "Qwen/Qwen2.5-3B-Instruct"
+LLM_FALLBACK_MODEL = "Qwen/Qwen2.5-0.5B-Instruct"
+LLM_MAX_LENGTH = 384
+LLM_BATCH_SIZE = 8
+LLM_GRAD_ACC = 2
+LLM_EPOCHS = 1
 LLM_LR = 2e-4
 LLM_LORA_R = 16
 LLM_LORA_ALPHA = 32
