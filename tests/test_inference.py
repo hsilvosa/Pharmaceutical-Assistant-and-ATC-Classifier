@@ -2,8 +2,20 @@
 Integration tests for inference engines.
 """
 import pytest
-from src.inference import ATCClassifierEngine, CIMAMedicalAssistantEngine
+from pathlib import Path
 
+from src.config import ATC_MODEL_DIR
+from src.inference import ATCClassifierEngine, ATCModelNotTrainedError, CIMAMedicalAssistantEngine
+
+def test_atc_engine_refuses_untrained_model(tmp_path):
+    with pytest.raises(ATCModelNotTrainedError):
+        ATCClassifierEngine(model_dir=str(tmp_path))
+
+
+@pytest.mark.skipif(
+    not (Path(ATC_MODEL_DIR) / "final_model").exists(),
+    reason="ATC classifier is not trained yet",
+)
 def test_atc_classifier_engine():
     engine = ATCClassifierEngine()
     res = engine.predict("Omeprazol 20mg capsulas orales para reflujo", top_k=3)

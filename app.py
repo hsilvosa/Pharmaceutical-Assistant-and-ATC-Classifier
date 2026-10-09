@@ -12,7 +12,7 @@ import pandas as pd
 import streamlit as st
 
 from src.config import ATC_LEVEL_1_MAP
-from src.inference import ATCClassifierEngine, CIMAMedicalAssistantEngine
+from src.inference import ATCClassifierEngine, ATCModelNotTrainedError, CIMAMedicalAssistantEngine
 
 st.set_page_config(
     page_title="CIMA Pharmaceutical Assistant & ATC Classifier",
@@ -69,7 +69,10 @@ st.markdown("""
 
 @st.cache_resource
 def load_engines():
-    atc_eng = ATCClassifierEngine()
+    try:
+        atc_eng = ATCClassifierEngine()
+    except ATCModelNotTrainedError:
+        atc_eng = None
     qa_eng = CIMAMedicalAssistantEngine()
     return atc_eng, qa_eng
 
@@ -194,6 +197,12 @@ with tabs[2]:
     st.markdown("### 🏷️ Clasificación de Taxonomía ATC (Nivel 1-5)")
     st.write("Introduzca la descripción del medicamento, principios activos o fragmento del prospecto para predecir su categoría anatómica y terapéutica ATC.")
     
+    if atc_engine is None:
+        st.warning(
+            "The ATC classifier is not trained yet, so this tab is disabled. "
+            "Predictions from an untrained model would be random."
+        )
+
     text_to_classify = st.text_area(
         "Texto del medicamento / prospecto:",
         height=140,
@@ -204,7 +213,7 @@ with tabs[2]:
     with col_topk:
         top_k = st.slider("Top Predictions:", min_value=1, max_value=5, value=3)
     
-    if st.button("⚡ Predecir Código ATC", type="primary"):
+    if st.button("⚡ Predecir Código ATC", type="primary", disabled=atc_engine is None):
         if text_to_classify:
             with st.spinner("Ejecutando BETO Hierarchical Multi-Label Classifier..."):
                 res = atc_engine.predict(text_to_classify, top_k=top_k)

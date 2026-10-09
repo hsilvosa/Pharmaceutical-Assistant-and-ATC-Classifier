@@ -63,20 +63,15 @@ def evaluate_atc_classifier():
     
     eval_df = df.sample(n=min(1000, len(df)), random_state=42)
     
-    if model_path.exists():
-        logger.info(f"Loading fine-tuned model from '{model_path}'...")
-        tokenizer = AutoTokenizer.from_pretrained(str(model_path))
-        model = AutoModelForSequenceClassification.from_pretrained(str(model_path))
-    else:
-        logger.info("Evaluating initialized base encoder baseline...")
-        base_model_name = "dccuchile/bert-base-spanish-wwm-cased"
-        tokenizer = AutoTokenizer.from_pretrained(base_model_name)
-        model = AutoModelForSequenceClassification.from_pretrained(
-            base_model_name,
-            num_labels=len(label2id),
-            id2label=id2label,
-            label2id=label2id
+    if not model_path.exists():
+        raise FileNotFoundError(
+            f"Trained ATC classifier not found at '{model_path}'. "
+            "Run 'python -m src.train_atc_classifier' first. "
+            "Evaluating an untrained model would produce misleading results."
         )
+    logger.info(f"Loading fine-tuned model from '{model_path}'...")
+    tokenizer = AutoTokenizer.from_pretrained(str(model_path))
+    model = AutoModelForSequenceClassification.from_pretrained(str(model_path))
 
     device = get_device()
     model.to(device)

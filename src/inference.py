@@ -139,6 +139,10 @@ CLINICAL_CONDITIONS = [
     }
 ]
 
+class ATCModelNotTrainedError(RuntimeError):
+    """Raised when the trained ATC classifier weights are not available."""
+
+
 class ATCClassifierEngine:
     def __init__(self, model_dir: str = None):
         self.device = get_device()
@@ -167,19 +171,15 @@ class ATCClassifierEngine:
             self.id2label = {i: lvl for i, lvl in enumerate(unique_levels)}
 
     def _load_model(self):
-        if self.model_path.exists():
-            logger.info(f"Loading trained ATC Classifier from '{self.model_path}'...")
-            self.tokenizer = AutoTokenizer.from_pretrained(str(self.model_path))
-            self.model = AutoModelForSequenceClassification.from_pretrained(str(self.model_path))
-        else:
-            logger.info(f"Loading base encoder '{ATC_BASE_MODEL}'...")
-            self.tokenizer = AutoTokenizer.from_pretrained(ATC_BASE_MODEL)
-            self.model = AutoModelForSequenceClassification.from_pretrained(
-                ATC_BASE_MODEL,
-                num_labels=len(self.id2label),
-                id2label=self.id2label,
-                label2id=self.label2id
+        if not self.model_path.exists():
+            raise ATCModelNotTrainedError(
+                f"Trained ATC classifier not found at '{self.model_path}'. "
+                "Run 'python -m src.train_atc_classifier' first. "
+                "Refusing to serve predictions from an untrained model."
             )
+        logger.info(f"Loading trained ATC Classifier from '{self.model_path}'...")
+        self.tokenizer = AutoTokenizer.from_pretrained(str(self.model_path))
+        self.model = AutoModelForSequenceClassification.from_pretrained(str(self.model_path))
         self.model.to(self.device)
         self.model.eval()
 
