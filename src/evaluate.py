@@ -16,10 +16,12 @@ import torch
 from sklearn.metrics import classification_report, precision_recall_fscore_support
 from transformers import AutoTokenizer, AutoModelForSequenceClassification
 
+from src.atc_split import grouped_split
 from src.config import (
     PROCESSED_DATA_DIR,
     ATC_MODEL_DIR,
-    ATC_LEVEL_1_MAP
+    ATC_LEVEL_1_MAP,
+    ATC_SEED
 )
 
 logger = setup_logger("evaluate")
@@ -61,7 +63,9 @@ def evaluate_atc_classifier():
     df["label"] = df["atc_level1"].map(label2id)
     df = df.dropna(subset=["label", "text_input"])
     
-    eval_df = df.sample(n=min(1000, len(df)), random_state=42)
+    # Held-out test partition: active-ingredient groups never seen during training.
+    df["label"] = df["label"].astype(int)
+    _, _, eval_df = grouped_split(df, seed=ATC_SEED)
     
     if not model_path.exists():
         raise FileNotFoundError(
@@ -106,7 +110,9 @@ def evaluate_atc_classifier():
     _, _, macro_f1, _ = precision_recall_fscore_support(labels_list, preds_list, average="macro", zero_division=0)
     
     report_data = {
+        "split": "held-out test, grouped by active-ingredient set",
         "num_eval_samples": len(eval_df),
+        "num_unique_texts": int(eval_df["text_input"].nunique()),
         "top1_accuracy": round(float(top1_acc), 4),
         "top3_accuracy": round(float(top3_acc), 4),
         "micro_f1": round(float(micro_f1), 4),

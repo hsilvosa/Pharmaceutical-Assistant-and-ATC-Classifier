@@ -22,6 +22,7 @@ from transformers import (
     DataCollatorWithPadding
 )
 
+from src.atc_split import grouped_split
 from src.config import (
     PROCESSED_DATA_DIR,
     ATC_MODEL_DIR,
@@ -98,8 +99,11 @@ def train_atc_model():
     df = df.dropna(subset=["label", "text_input"])
     df["label"] = df["label"].astype(int)
     
-    train_df, val_df = train_test_split(df, test_size=0.15, random_state=ATC_SEED, stratify=df["label"])
-    logger.info(f"Split data: {len(train_df)} train, {len(val_df)} validation. Classes: {len(label2id)}")
+    train_df, val_df, test_df = grouped_split(df, seed=ATC_SEED)
+    logger.info(
+        f"Grouped split by active ingredients: {len(train_df)} train, {len(val_df)} validation, "
+        f"{len(test_df)} test. Classes: {len(label2id)}"
+    )
     
     logger.info(f"Loading tokenizer & model: '{ATC_BASE_MODEL}'...")
     tokenizer = AutoTokenizer.from_pretrained(ATC_BASE_MODEL)
@@ -127,7 +131,7 @@ def train_atc_model():
         
     training_args = TrainingArguments(
         output_dir=str(output_dir / "checkpoints"),
-        evaluation_strategy="epoch",
+        eval_strategy="epoch",
         save_strategy="epoch",
         learning_rate=ATC_LR,
         per_device_train_batch_size=ATC_BATCH_SIZE,

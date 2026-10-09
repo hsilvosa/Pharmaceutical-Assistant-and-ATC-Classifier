@@ -21,7 +21,7 @@ This project leverages two open research datasets:
 The repository combines the existing ATC models with a grounded CIMA retrieval system:
 
 1. **BETO ATC Hierarchical Classifier** (`text-classification`):  
-   Transformer encoder built on `dccuchile/bert-base-spanish-wwm-cased` (BETO); `PlanTL-GOB-ES/roberta-base-biomedical-clinical-es` is configured as an alternative. It accepts Spanish drug descriptions, active ingredients, dosage forms, or clinical text snippets and predicts the ATC level-1 anatomical group (single-label). Levels 2–5 are already extracted during preprocessing; training on them is listed under Next Steps. **Not trained yet:** the weights in `models/atc_classifier` are the BETO base model with a randomly initialised classification head (see [Model status](#model-status)).
+   Transformer encoder built on `dccuchile/bert-base-spanish-wwm-cased` (BETO); `PlanTL-GOB-ES/roberta-base-biomedical-clinical-es` is configured as an alternative. It accepts Spanish drug descriptions, active ingredients, dosage forms, or clinical text snippets and predicts the ATC level-1 anatomical group (single-label). Levels 2–5 are already extracted during preprocessing; training on them is listed under Next Steps. **Trained** (4 epochs, `models/atc_classifier/final_model`); held-out accuracy is 79.3% top-1 on unseen active ingredients (see [Model status](#model-status)).
 
 2. **CIMA Spanish Medical LLM** (`text-generation` / `causal-lm`):  
    Instruction fine-tuned small language model (`meta-llama/Llama-3.2-3B-Instruct` / `microsoft/Phi-3.5-mini-instruct`) intended to be trained with 4-bit QLoRA on Spanish patient leaflets and product technical sheets (`src/train_medical_llm.py`). **Not trained yet:** the adapter in `models/cima_medical_llama` is an untrained placeholder whose LoRA B matrices are all zero, so it behaves exactly like the base model (see [Model status](#model-status)).
@@ -40,8 +40,8 @@ The repository combines the existing ATC models with a grounded CIMA retrieval s
 
 | Model Component | Base Architecture | Evaluation Metric | Score | Pipeline Tag |
 |---|---|---|---|---|
-| BETO ATC classifier (**untrained**, random head) | `dccuchile/bert-base-spanish-wwm-cased` | Top-1 Accuracy (1,000 samples) | 2.0% (chance 7.1%) | `text-classification` |
-| BETO ATC classifier (**untrained**, random head) | `dccuchile/bert-base-spanish-wwm-cased` | Top-3 Accuracy (1,000 samples) | 29.0% | `text-classification` |
+| BETO ATC classifier (level 1, 13 of 14 classes present in test) | `dccuchile/bert-base-spanish-wwm-cased` | Top-1 Accuracy (7,996 held-out rows, 2,518 unique texts) | 79.3% (chance 7.1%) | `text-classification` |
+| BETO ATC classifier (level 1) | `dccuchile/bert-base-spanish-wwm-cased` | Top-3 Accuracy / macro-F1 (same test set) | 87.7% / 0.691 | `text-classification` |
 | CIMA RAG | `BAAI/bge-m3` + Qwen3 8B GGUF | Recall@5 / MRR (300 cases) | 1.000 / 1.000 | `retrieval-augmented-generation` |
 | CIMA RAG | `BAAI/bge-m3` + Qwen3 8B GGUF | Citation precision / coverage | 0.990 / 0.997 | `retrieval-augmented-generation` |
 | CIMA RAG | `BAAI/bge-m3` + Qwen3 8B GGUF | Answer recall (expected values) | 0.977 | `retrieval-augmented-generation` |
@@ -53,7 +53,7 @@ The RAG rows come from the full GPU run recorded in `eval/baseline.json` (2026-1
 
 Checked on 2026-10-08:
 
-- **ATC classifier: not trained.** `models/atc_classifier/model.safetensors` was written by `export_hf.py` from the BETO base model with a freshly initialised classification head. `src/train_atc_classifier.py` saves its result to `models/atc_classifier/final_model`, and that folder does not exist. The two rows above are the measured accuracy of those exported weights on 1,000 validation samples (`data/processed/evaluation_report.json` records 10.6% from an earlier run of the same untrained model). Earlier versions of this README and of the generated model card listed 94.8% / 98.6% / 0.942 / 0.915; those numbers did not come from any evaluation and have been removed. Until the model is trained, the ATC tab of the Streamlit app returns predictions from the untrained model and should not be trusted.
+- **ATC classifier: trained, level 1 only.** `python -m src.train_atc_classifier` fine-tunes BETO for 4 epochs (batch 32, lr 3e-5) and writes `models/atc_classifier/final_model`. The data has one row per medicine presentation (about 69% of texts are duplicates), so a random row split leaks almost every validation text into training. A first run with a random 85/15 split reported 99.9% validation accuracy, but 97.9% of its validation texts also appeared in training; that number is not a generalisation estimate and was discarded. The reported run splits by active-ingredient set (`src/atc_split.py`, 61,057 train / 6,777 validation / 7,996 test rows, no ingredient set shared between partitions). Results on the held-out test: top-1 79.3%, top-3 87.7%, macro-F1 0.691 (`data/processed/evaluation_report.json`); validation accuracy 84.1%. Class P (antiparasitics, 143 rows) has no rows in the test split, so it is not measured. Only one split seed was run, so the spread between seeds is unknown.
 - **Medical LLM adapter: not trained.** `export_hf.py` creates `adapter_model.safetensors` with zero LoRA B matrices (112 of 112 are zero), which is a no-op on top of `meta-llama/Llama-3.2-3B-Instruct`. No result is reported for it.
 - **Grounded CIMA RAG: evaluated.** Uses pretrained `BAAI/bge-m3`, `BAAI/bge-reranker-v2-m3` and Qwen3-8B without fine-tuning; results above.
 
@@ -179,7 +179,7 @@ python export_hf.py --upload --repo-id YOUR_USERNAME/BETO-ATC-Hierarchical-Class
 ## Next Steps
 
 - Extend the ATC classifier from level 1 to the full five-level hierarchy (levels 2–5 are already in `atc_dataset.parquet`), for example with one head per level or hierarchical decoding.
-- Train the ATC classifier (`python -m src.train_atc_classifier`, about 25–60 minutes on a 12 GB GPU by estimate), then run `python -m src.evaluate` and commit the real `evaluation_report.json`. `src/evaluate.py` and `src/inference.py` now fail with an explicit error when `models/atc_classifier/final_model` is missing, and the Streamlit ATC tab is disabled until the model exists.
+- Improve the ATC classifier: report per-class results, try several split seeds, add the missing ingredient information to the input, and extend to levels 2–5.
 - Train the medical LLM adapter (`python -m src.train_medical_llm`) and evaluate it before reporting any result for it.
 - Replace the metrics and training claims in the model cards generated by `export_hf.py` once real results exist.
 - Broaden the RAG benchmark with more leaflet and technical-sheet questions (only 11 of 300 cases today) and add a per-section quality review of the generated answers.
