@@ -104,3 +104,13 @@ def test_regression_comparison_allows_three_points() -> None:
     baseline = {"metrics": {name: 0.92 for name in THRESHOLDS}}
     assert all(compare_baseline(report, baseline).values())
 
+
+
+def test_refusal_counts_as_valid_non_answer() -> None:
+    from src.rag.evaluation import _status_correct
+    from src.rag.models import AnswerStatus as S
+
+    assert _status_correct(S.REFUSED, S.INSUFFICIENT_EVIDENCE)
+    assert _status_correct(S.INSUFFICIENT_EVIDENCE, S.INSUFFICIENT_EVIDENCE)
+    assert not _status_correct(S.ANSWERED, S.INSUFFICIENT_EVIDENCE)
+    assert not _status_correct(S.INSUFFICIENT_EVIDENCE, S.REFUSED)
