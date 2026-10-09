@@ -9,6 +9,7 @@ setup_environment()
 import os
 import argparse
 import json
+import shutil
 import torch
 import torch.nn as nn
 from pathlib import Path
@@ -19,6 +20,7 @@ from transformers import (
 )
 
 from src.config import (
+    PROCESSED_DATA_DIR,
     MODELS_DIR,
     ATC_MODEL_DIR,
     LLM_MODEL_DIR,
@@ -34,6 +36,7 @@ ATC_MODEL_CARD = """---
 language:
 - es
 license: apache-2.0
+base_model: dccuchile/bert-base-spanish-wwm-cased
 tags:
 - text-classification
 - spanish
@@ -43,19 +46,32 @@ tags:
 - aemps-cima
 datasets:
 - hsilvosa/aemps-cima
-- hsilvosa/openplacsp
 pipeline_tag: text-classification
 ---
 
-# BETO ATC Classifier (not trained yet)
+# BETO ATC Level-1 Classifier
 
-> **Status: untrained.** These weights are [`dccuchile/bert-base-spanish-wwm-cased`](https://huggingface.co/dccuchile/bert-base-spanish-wwm-cased) (BETO) with a randomly initialised ATC level-1 classification head. They have not been fine-tuned and no evaluation result is reported. Measured top-1 accuracy of this checkpoint on 1,000 validation samples was 2.0%, below the 7.1% chance level. Do not use it for predictions.
+Fine-tuned [`dccuchile/bert-base-spanish-wwm-cased`](https://huggingface.co/dccuchile/bert-base-spanish-wwm-cased) (BETO) that maps a Spanish drug description (name, dose, dosage form, active ingredients, route) to its ATC level-1 anatomical group (single-label, 14 classes). Levels 2-5 are not modelled. Training code: `src/train_atc_classifier.py`.
 
-The intended model is a single-label classifier fine-tuned on the **AEMPS CIMA Research Dataset** (`hsilvosa/aemps-cima`) that maps a Spanish drug description, active ingredients, dosage form, or leaflet snippet to its **ATC (Anatomical Therapeutic Chemical)** level-1 anatomical group. Training code: `src/train_atc_classifier.py`.
+## Evaluation
+
+Held-out test set: {num_eval_samples} rows ({num_unique_texts} unique texts), split by active-ingredient set. No ingredient combination in the test set appears in training.
+
+| Metric | Value |
+|---|---|
+| Top-1 accuracy | {top1_accuracy:.1%} |
+| Top-3 accuracy | {top3_accuracy:.1%} |
+| Macro F1 | {macro_f1:.3f} |
+
+Limits:
+- One split seed was run, so the variation between seeds is unknown.
+- Class P (antiparasitics, 143 rows in total) has no rows in the test set and is not measured.
+- The dataset has one row per medicine presentation, so many rows repeat. A random row split gives about 99.9% accuracy because almost every test text also appears in training. Do not read that number as generalisation.
+- The model predicts the ATC group from the description. It does not replace the official AEMPS classification.
 
 ## Intended Use & Disclaimer
 
-Intended exclusively for medical research and pharmaceutical data analytics. Not intended for clinical prescribing or medical advice.
+Intended only for medical research and pharmaceutical data analytics. Not for clinical prescribing or medical advice.
 
 ## Usage
 
@@ -63,13 +79,13 @@ Intended exclusively for medical research and pharmaceutical data analytics. Not
 from transformers import AutoTokenizer, AutoModelForSequenceClassification
 import torch
 
-tokenizer = AutoTokenizer.from_pretrained("your-hf-username/BETO-ATC-Hierarchical-Classifier")
-model = AutoModelForSequenceClassification.from_pretrained("your-hf-username/BETO-ATC-Hierarchical-Classifier")
+repo = "your-hf-username/BETO-ATC-Classifier"
+tokenizer = AutoTokenizer.from_pretrained(repo)
+model = AutoModelForSequenceClassification.from_pretrained(repo)
 
 text = "Medicamento: Omeprazol 20 mg | Forma farmacéutica: COMPRIMIDO | Principios activos: Omeprazol"
 inputs = tokenizer(text, return_tensors="pt")
-outputs = model(**inputs)
-probs = torch.softmax(outputs.logits, dim=-1)
+probs = torch.softmax(model(**inputs).logits, dim=-1)
 print(probs)
 ```
 """
@@ -117,6 +133,38 @@ print(tokenizer.decode(outputs[0], skip_special_tokens=True))
 ```
 """
 
+ATC_EXPORT_DIRNAME = "hf_export"
+
+
+def export_trained_atc(atc_dir: Path) -> Path:
+    """Copy the trained ATC classifier and a metrics-based model card to a clean staging folder.
+
+    Refuses to export when the trained model or its evaluation report is missing,
+    so untrained weights can never be packaged.
+    """
+    trained = atc_dir / "final_model"
+    report_path = Path(PROCESSED_DATA_DIR) / "evaluation_report.json"
+    if not trained.exists():
+        raise FileNotFoundError(
+            f"Trained ATC classifier not found at '{trained}'. Run 'python -m src.train_atc_classifier' first."
+        )
+    if not report_path.exists():
+        raise FileNotFoundError(
+            f"Evaluation report '{report_path}' not found. Run 'python -m src.evaluate' first."
+        )
+    with open(report_path, "r", encoding="utf-8") as f:
+        report = json.load(f)
+
+    out = atc_dir / ATC_EXPORT_DIRNAME
+    if out.exists():
+        shutil.rmtree(out)
+    shutil.copytree(trained, out, ignore=shutil.ignore_patterns("checkpoint-*", "training_args.bin"))
+    shutil.copy(atc_dir / "label_mapping.json", out / "label_mapping.json")
+    (out / "README.md").write_text(ATC_MODEL_CARD.format(**report).strip() + "\n", encoding="utf-8")
+    logger.info(f"ATC Classifier export complete at '{out}'")
+    return out
+
+
 def prepare_hf_export():
     """Package complete model artifacts (weights, adapters, configs, tokenizers, model cards) for Hugging Face Hub."""
     logger.info("Exporting complete Hugging Face model artifacts...")
@@ -143,23 +191,8 @@ def prepare_hf_export():
         with open(mapping_path, "w", encoding="utf-8") as f:
             json.dump(mapping, f, ensure_ascii=False, indent=2)
 
-    logger.info(f"Saving ATC Classifier model weights & tokenizer to '{atc_dir}'...")
-    tokenizer_atc = AutoTokenizer.from_pretrained(ATC_BASE_MODEL)
-    tokenizer_atc.save_pretrained(str(atc_dir))
-    
-    model_atc = AutoModelForSequenceClassification.from_pretrained(
-        ATC_BASE_MODEL,
-        num_labels=len(label2id),
-        id2label=id2label,
-        label2id=label2id
-    )
-    model_atc.save_pretrained(str(atc_dir))
-    
-    with open(atc_dir / "README.md", "w", encoding="utf-8") as f:
-        f.write(ATC_MODEL_CARD.strip())
-        
-    logger.info(f"ATC Classifier export complete at '{atc_dir}'")
-    
+    export_trained_atc(atc_dir)
+
     # 2. Export CIMA Medical LLM LoRA Adapter Weights & Config
     llm_dir = Path(LLM_MODEL_DIR)
     llm_dir.mkdir(parents=True, exist_ok=True)
@@ -217,7 +250,7 @@ def upload_to_huggingface(repo_id: str, model_type: str = "atc", token: str = No
     from huggingface_hub import HfApi
     
     api = HfApi(token=token or os.getenv("HF_TOKEN"))
-    folder_path = Path(ATC_MODEL_DIR) if model_type == "atc" else Path(LLM_MODEL_DIR)
+    folder_path = Path(ATC_MODEL_DIR) / ATC_EXPORT_DIRNAME if model_type == "atc" else Path(LLM_MODEL_DIR)
     
     if not folder_path.exists():
         logger.error(f"Model folder '{folder_path}' does not exist.")
