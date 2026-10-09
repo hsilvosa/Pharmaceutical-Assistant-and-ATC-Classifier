@@ -78,7 +78,9 @@ class RagService:
         resolver: EntityResolver,
         generator: Generator,
         source_revision: str,
+        min_rerank_score: float = 0.0,
     ) -> None:
+        self.min_rerank_score = min_rerank_score
         self.retriever = retriever
         self.resolver = resolver
         self.generator = generator
@@ -152,7 +154,7 @@ class RagService:
         retrieval_started = time.perf_counter()
         hits = self.retriever.retrieve(request.question, registration)
         retrieval_ms = (time.perf_counter() - retrieval_started) * 1000
-        if not hits:
+        if not hits or hits[0].score < self.min_rerank_score:
             return (
                 QueryResponse(
                     status=AnswerStatus.INSUFFICIENT_EVIDENCE,
@@ -165,7 +167,7 @@ class RagService:
                     language=language,
                     latency_ms={"retrieval": retrieval_ms, "total": retrieval_ms},
                 ),
-                [],
+                hits,
             )
 
         generation_started = time.perf_counter()

@@ -31,6 +31,9 @@ class Settings(BaseSettings):
     lexical_candidates: int = Field(default=50, ge=1)
     rerank_candidates: int = Field(default=30, ge=1)
     context_passages: int = Field(default=8, ge=1)
+    # Minimum cross-encoder score of the best passage. On the benchmark, answerable questions
+    # score >= 0.97 and unanswerable or injection questions score <= 0.15.
+    min_rerank_score: float = Field(default=0.5, ge=0.0, le=1.0)
 
     @model_validator(mode="after")
     def require_pinned_dataset(self) -> Settings:

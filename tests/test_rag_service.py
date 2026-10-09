@@ -116,3 +116,17 @@ def test_truncated_output_is_retried_with_a_brevity_request(fixture_components) 
     assert len(generator.questions) == 2
     assert generator.questions[0] == "What are the contraindications?"
     assert "at most 120 words" in generator.questions[1]
+
+
+def test_low_relevance_best_passage_returns_insufficient_evidence(fixture_components) -> None:
+    _, medicines, _, service = fixture_components
+    strict = RagService(
+        service.retriever,
+        EntityResolver(medicines),
+        service.generator,
+        "fixture-revision",
+        min_rerank_score=1e9,
+    )
+    response = strict.query(QueryRequest(question="What are the contraindications?", language="en"))
+    assert response.status == AnswerStatus.INSUFFICIENT_EVIDENCE
+    assert not response.citations

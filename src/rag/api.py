@@ -71,6 +71,7 @@ def load_service(settings: Settings) -> RagService:
         EntityResolver(store.medicines()),
         LlamaCppGenerator(settings.llama_base_url, settings.llama_model),
         manifest.dataset_revision,
+        min_rerank_score=settings.min_rerank_score,
     )
 
 
