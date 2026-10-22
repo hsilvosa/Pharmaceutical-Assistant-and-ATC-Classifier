@@ -1,0 +1,17 @@
+{
+  "note": "Agent evaluation (36 cases, one client) before and after the tuned llama-server flags; same pass/fail cases.",
+  "before": {
+    "server": "--parallel 1 --ctx-size 8192 (flash attention auto)",
+    "passed": 33,
+    "latency_ms_p50": 12468.0,
+    "latency_ms_p95": 35328.0,
+    "wall_seconds": 573.4
+  },
+  "after": {
+    "server": "--parallel 2 --ctx-size 16384 -fa on -ctk q8_0 -ctv q8_0",
+    "passed": 33,
+    "latency_ms_p50": 10188.0,
+    "latency_ms_p95": 36125.0,
+    "wall_seconds": 480.3
+  }
+}

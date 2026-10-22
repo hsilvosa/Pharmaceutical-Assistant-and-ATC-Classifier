@@ -1,0 +1,7 @@
+apiVersion: 1
+providers:
+  - name: pharma-assistant
+    folder: Pharma assistant
+    type: file
+    options:
+      path: /var/lib/grafana/dashboards
