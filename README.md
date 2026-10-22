@@ -226,6 +226,8 @@ The classifier was badly overconfident: on the held-out split (7,996 rows, 13 of
 
 ## Public demo
 
+![La botica: ATC classifier drawers, word highlights and an agent receipt](docs/img/la-botica.png)
+
 Live: **https://huggingface.co/spaces/hsilvosa/la-botica** (English by default, Spanish switch). Free Hugging Face Spaces only host static sites, so the demo is a static page (`static-space/`) and the classifier runs in the visitor's browser: the model is exported to ONNX and quantised to int8 (110 MB) with `scripts/export_atc_onnx.py` and run with Transformers.js, with no server and no data leaving the page. On 600 held-out rows the int8 model agrees with the PyTorch model on 98.2% of predictions (top-1 79.5% vs 78.8%, calibration error 0.061 vs 0.062 with the same temperature; `eval/atc_onnx_parity.json`). The first visit downloads the model (about 30 s on a typical connection); the result appears within a second and the word highlights a few seconds later.
 
 While the model downloads, a progress bar shows the megabytes received and the page stays usable. A list of 2,956 CIMA active ingredients (most common first, searchable, filterable by ATC group) lets a visitor try the classifier without knowing any drug: after a pick, the page shows the group CIMA really files it under and whether the classifier never trained on that ingredient (a fair test) or did (not a fair test). A bilingual glossary explains ATC, active ingredient, calibration and the agent's stamps. The list is built by `scripts/build_space_assets.py`.
@@ -237,6 +239,10 @@ The page shows a pharmacy cabinet with 14 drawers (the ATC groups) with calibrat
 ## Case study
 
 A discovery-to-handover write-up of this system as a client engagement: [docs/CASE_STUDY.md](docs/CASE_STUDY.md).
+
+## What the evaluations found
+
+Eight places where a first result looked good and was not (a 99.9% accuracy that was leakage, a 98% confidence at 79% accuracy, safety rules that did not generalise, a refusal that was a bug, and more): [docs/FINDINGS.md](docs/FINDINGS.md).
 
 ## Agent
 
