@@ -36,8 +36,15 @@ PERSONALIZED_PATTERNS = (
 def detect_language(question: str, requested: str) -> str:
     if requested in {"es", "en"}:
         return requested
-    lowered = question.casefold()
-    spanish_markers = (" qué ", " cuál ", " medicamento", "según", "puedo", "tiene")
+    # Inverted marks only exist in Spanish. Accented letters are not a signal: English questions
+    # often contain Spanish product names such as "CÁPSULAS".
+    if "¿" in question or "¡" in question:
+        return "es"
+    lowered = re.sub(r"[^\w]+", " ", question.casefold())
+    spanish_markers = (
+        " qué ", " cuál ", " cuáles ", " cómo ", " cuánto ", " cuántos ", " medicamento", " según ",
+        " puedo ", " tiene ", " debo ", " dosis ", " ficha técnica ", " prospecto ", " efectos adversos ", " contraindicaciones ", " dime ", " muéstrame ",
+    )
     padded = f" {lowered} "
     return "es" if any(marker in padded for marker in spanish_markers) else "en"
 

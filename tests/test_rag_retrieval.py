@@ -27,7 +27,8 @@ def test_resolver_handles_accents_codes_and_ambiguity(fixture_components) -> Non
             MedicineCandidate(registration_number="2", name="Marca Común"),
         ]
     )
-    registration, candidates = ambiguous.resolve("Información sobre Marca Comun")
+    # Same name under two registrations stays ambiguous when the question depends on the registration.
+    registration, candidates = ambiguous.resolve("¿Está comercializada Marca Comun?")
     assert registration is None
     assert {item.registration_number for item in candidates} == {"1", "2"}
 
@@ -49,3 +50,25 @@ def test_fixture_reranker_prioritizes_requested_section_heading() -> None:
     scores = reranker.score("¿Qué indicaciones recoge la ficha técnica?", passages)
 
     assert scores[1] > scores[0]
+
+
+def test_same_name_registrations_resolve_to_the_canonical_one_unless_the_question_is_registration_specific():
+    from src.rag.models import MedicineCandidate
+    from src.rag.retrieval import EntityResolver
+
+    def candidate(registration: str, name: str) -> MedicineCandidate:
+        return MedicineCandidate(registration_number=registration, name=name)
+
+    resolver = EntityResolver(
+        [
+            candidate("66514", "INEGY 10 mg/40 mg COMPRIMIDOS"),
+            candidate("BE286334IP1", "INEGY 10 MG/40 MG COMPRIMIDOS"),
+            candidate("1", "A.A.S. 100 mg COMPRIMIDOS"),
+            candidate("2", "A.A.S. 300 mg COMPRIMIDOS"),
+        ]
+    )
+    assert resolver.resolve("¿Qué efectos adversos tiene INEGY 10 mg/40 mg COMPRIMIDOS?") == ("66514", [])
+    registration, options = resolver.resolve("¿Está comercializado INEGY 10 mg/40 mg COMPRIMIDOS?")
+    assert registration is None and len(options) == 2
+    registration, options = resolver.resolve("¿Qué contraindicaciones tiene A.A.S.?")
+    assert registration is None and len(options) == 2
