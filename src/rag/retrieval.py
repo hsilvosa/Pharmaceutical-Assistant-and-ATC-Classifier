@@ -16,6 +16,20 @@ def normalize_term(value: str) -> str:
     return re.sub(r"[^a-z0-9]+", " ", ascii_value).strip()
 
 
+# Fields that differ between registrations of the same product (stock, pack, code), so a question
+# about them must stay tied to one registration.
+REGISTRATION_SPECIFIC = re.compile(
+    r"(?<![a-z0-9])(comercializ[a-z0-9]*|marketed|receta|prescri[a-z0-9]*|codigo nacional|"
+    r"national code|registro|registration|presentacion[a-z0-9]*|presentation[a-z0-9]*|"
+    r"envase[a-z0-9]*|pack[a-z0-9]*)(?![a-z0-9])"
+)
+
+
+def canonical_registration(registrations: set[str]) -> str:
+    """Prefer the original registration over parallel-import (IP) and variant suffixes."""
+    return min(registrations, key=lambda r: (not r.isdigit(), len(r), r))
+
+
 class EntityResolver:
     def __init__(self, candidates: Sequence[MedicineCandidate]) -> None:
         self.candidates = list(candidates)
@@ -58,6 +72,11 @@ class EntityResolver:
         if len(registrations) == 1:
             return next(iter(registrations)), []
         if len(registrations) > 1:
+            names = {normalize_term(self.by_registration[r][0].name) for r in registrations}
+            if len(names) == 1 and not REGISTRATION_SPECIFIC.search(normalized):
+                # Same product under several registrations (packs, parallel imports): the leaflet
+                # and technical-sheet text answers the same, so there is nothing to ask the user.
+                return canonical_registration(registrations), []
             candidates = []
             for registration in sorted(registrations):
                 candidates.append(self.by_registration[registration][0])

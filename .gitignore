@@ -45,3 +45,8 @@ indexes/
 artifacts/
 data/huggingface-cache/
 models/qwen3/
+
+# Weights for the browser demo (110 MB) live in the Space repository; regenerate with scripts/export_atc_onnx.py
+static-space/models/
+!static-space/data/
+!space/data/

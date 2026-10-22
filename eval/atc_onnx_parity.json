@@ -1,0 +1,23 @@
+{
+  "rows": 600,
+  "torch_top1": 0.7883,
+  "size_mb": {
+    "fp32": 439.7,
+    "int8": 110.6
+  },
+  "torch": {
+    "ece_with_temperature": 0.0623
+  },
+  "fp32": {
+    "top1": 0.7883,
+    "agreement_with_torch": 1.0,
+    "max_abs_logit_diff": 0.0,
+    "ece_with_temperature": 0.0623
+  },
+  "int8": {
+    "top1": 0.795,
+    "agreement_with_torch": 0.9817,
+    "max_abs_logit_diff": 6.3097,
+    "ece_with_temperature": 0.061
+  }
+}

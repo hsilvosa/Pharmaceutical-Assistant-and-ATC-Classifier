@@ -1,0 +1,32 @@
+{
+  "full training format (all fields)": {
+    "n": 2518,
+    "top1": 0.788,
+    "mean_confidence": 0.843
+  },
+  "name + form + ingredient": {
+    "n": 2518,
+    "top1": 0.722,
+    "mean_confidence": 0.827
+  },
+  "name + ingredient": {
+    "n": 2518,
+    "top1": 0.732,
+    "mean_confidence": 0.809
+  },
+  "ingredient only": {
+    "n": 2518,
+    "top1": 0.682,
+    "mean_confidence": 0.767
+  },
+  "name only": {
+    "n": 2518,
+    "top1": 0.551,
+    "mean_confidence": 0.698
+  },
+  "name + form": {
+    "n": 2518,
+    "top1": 0.558,
+    "mean_confidence": 0.712
+  }
+}

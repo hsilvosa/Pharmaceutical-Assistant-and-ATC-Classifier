@@ -1,0 +1,31 @@
+# Observability stack. The agent API and llama-server run on the host (they need the GPU);
+# Prometheus scrapes them through host.docker.internal.
+#
+#   llama-server -m models/qwen3/Qwen3-8B-Q4_K_M.gguf --port 8080 --jinja --metrics --parallel 2 --ctx-size 16384 -fa on
+#   CIMA_RAG_INDEX_DIR=indexes/cima-bge uvicorn src.agent.api:app --port 8000
+#   docker compose -f deploy/docker-compose.yml up -d     # Grafana on http://localhost:3000
+services:
+  prometheus:
+    image: prom/prometheus:v2.55.1
+    command: ["--config.file=/etc/prometheus/prometheus.yml", "--storage.tsdb.retention.time=2d"]
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    ports:
+      - "127.0.0.1:9090:9090"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  grafana:
+    image: grafana/grafana:11.3.0
+    environment:
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
+      GF_AUTH_DISABLE_LOGIN_FORM: "false"
+      GF_SECURITY_ADMIN_PASSWORD: "${GRAFANA_ADMIN_PASSWORD:-change-me}"
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
+    ports:
+      - "127.0.0.1:3000:3000"
+    depends_on:
+      - prometheus

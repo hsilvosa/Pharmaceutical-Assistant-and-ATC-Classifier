@@ -11,7 +11,6 @@ import numpy as np
 
 from .models import Chunk, MedicineCandidate, SearchHit
 
-
 WRITE_BATCH_ROWS = 10_000
 
 

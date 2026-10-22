@@ -170,7 +170,7 @@ def generate_section_benchmark(source: SourceData, count: int = 120, terms: int 
         seen, picked = set(), []
         # Words used in at least 3 sections of the same kind are real domain terms.
         # Words used only once are often typos or product-specific noise.
-        def frequency(token: str) -> int:
+        def frequency(token: str, doc_type: str = doc_type, section: str = section) -> int:
             return document_frequency[(doc_type, section, token)]
 
         for token in sorted(tokens, key=lambda t: (frequency(t), t)):
@@ -194,7 +194,7 @@ def generate_section_benchmark(source: SourceData, count: int = 120, terms: int 
     cap = max(1, math.ceil(count / len(SECTION_SPECS)))
     items = []
     for registration, doc_type, section, picked in candidates:
-        category, es, en = SECTION_SPECS[(doc_type, section)]
+        category, es, _en = SECTION_SPECS[(doc_type, section)]
         if per_category[category] >= cap or len(items) >= count:
             continue
         per_category[category] += 1

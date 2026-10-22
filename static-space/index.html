@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>The pharmacy cabinet · pharma-assistant</title>
+<meta name="description" content="ATC classifier running in your browser, and receipts of real agent runs over official AEMPS medicine documents.">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="page">
+  <header>
+    <div class="cross" aria-hidden="true"></div>
+    <h1><small data-t="kicker"></small><span data-t="title"></span></h1>
+    <p class="sub" data-t="sub"></p>
+    <div class="lang" role="group" aria-label="Language"><button data-l="en" aria-pressed="true">EN</button><button data-l="es" aria-pressed="false">ES</button></div>
+  </header>
+  <div class="wrap">
+    <section>
+      <div class="panel-t" data-t="s1"></div>
+      <form class="tray" id="f" autocomplete="off">
+        <label><span data-t="name"></span><input id="name" value="Sertralina 50 mg comprimidos"></label>
+        <label><span data-t="ing"></span><input id="ing" value="SERTRALINA"></label>
+        <label><span data-t="form"></span><input id="form" list="forms" value="COMPRIMIDO RECUBIERTO CON PELÍCULA"></label>
+        <datalist id="forms"></datalist>
+        <button class="go" id="go" disabled data-t="loading"></button>
+        <div class="load" id="load" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" aria-labelledby="loadtxt">
+          <div class="bar"><i id="fill"></i></div>
+          <p id="loadtxt"></p>
+        </div>
+      </form>
+      <div class="chips" id="chips"></div>
+      <details class="picker" id="picker" open>
+        <summary data-t="pk_t"></summary>
+        <p class="hint" data-t="pk_help"></p>
+        <div class="pk-tools">
+          <input id="pk-q" type="search" autocomplete="off" aria-label="Search">
+          <select id="pk-g" aria-label="Group"></select>
+          <label class="pk-u"><input type="checkbox" id="pk-u"> <span data-t="pk_unseen"></span></label>
+          <button type="button" class="chip" id="pk-r" data-t="pk_random"></button>
+        </div>
+        <ul class="pk-list" id="pk-list"></ul>
+        <p class="hint" id="pk-count" aria-live="polite"></p>
+      </details>
+      <p class="hint" id="spanish"></p>
+      <div class="panel-t" data-t="s2"></div>
+      <div class="cab" id="cab" role="list"></div>
+      <div class="inside" id="inside" aria-live="polite"></div>
+      <p class="note" id="note1"></p>
+    </section>
+    <section>
+      <div class="panel-t" data-t="s3"></div>
+      <div class="cases" id="cases"></div>
+      <div class="printer"></div>
+      <div class="slip" id="slip" aria-live="polite"></div>
+      <p class="note" id="note2"></p>
+    </section>
+  </div>
+  <section class="gloss" id="glossary">
+    <div class="panel-t" data-t="gl_t"></div>
+    <dl id="gl"></dl>
+  </section>
+  <footer><span data-t="footer"></span> <a href="https://github.com/hsilvosa/Pharmaceutical-Assistant-and-ATC-Classifier">GitHub</a></footer>
+</div>
+<script type="module" src="app.js"></script>
+</body>
+</html>

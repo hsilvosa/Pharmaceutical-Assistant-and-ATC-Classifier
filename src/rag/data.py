@@ -281,7 +281,7 @@ def catalog_chunks(
         text = "\n".join(lines)
         content_hash = _digest(text)
         yield Chunk(
-            chunk_id=_digest("|".join([source.revision, registration, "catalog", content_hash])),
+            chunk_id=_digest(f"{source.revision}|{registration}|catalog|{content_hash}"),
             registration_number=registration,
             medicine_name=name,
             document_type=0,

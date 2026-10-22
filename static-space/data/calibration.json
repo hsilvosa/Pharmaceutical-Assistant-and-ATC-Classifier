@@ -1,0 +1,34 @@
+{
+  "temperature": 2.37,
+  "fitted_on": "validation split (6777 rows)",
+  "evaluated_on": "test split (7996 rows, 13 classes present)",
+  "test_before": {
+    "accuracy": 0.7933,
+    "ece": 0.1885,
+    "nll": 1.7436,
+    "brier": 0.3942,
+    "mean_confidence": 0.9818
+  },
+  "test_after": {
+    "accuracy": 0.7933,
+    "ece": 0.0614,
+    "nll": 0.9146,
+    "brier": 0.3422,
+    "mean_confidence": 0.8443
+  },
+  "validation_before": {
+    "accuracy": 0.8408,
+    "ece": 0.1406,
+    "nll": 1.2986,
+    "brier": 0.2961,
+    "mean_confidence": 0.9814
+  },
+  "validation_after": {
+    "accuracy": 0.8408,
+    "ece": 0.0603,
+    "nll": 0.7136,
+    "brier": 0.2574,
+    "mean_confidence": 0.8533
+  },
+  "note": "Single temperature scaling; accuracy and ranking do not change. One seed."
+}

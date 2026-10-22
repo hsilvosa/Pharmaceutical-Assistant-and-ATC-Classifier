@@ -197,6 +197,104 @@ Result of the run on 2026-10-09 (`artifacts/evaluations/sections`):
 - The LLM adapter is a format adapter and is not evaluated with retrieved context or on safety.
 - Improvements not started: per-class ATC metrics, other seeds, ATC levels 2-5, manual review of `eval/sections.jsonl` answers.
 
+### Free-text benchmark
+
+`eval/freetext.jsonl` holds 120 questions (58 dev, 62 test; 100 Spanish, 20 English) written by Qwen3-8B from real leaflet and technical-sheet passages, one per medicine, across 16 section types. Each item carries a verbatim reference excerpt and the gold passage; items were kept only if the reference appears verbatim in the passage and the question names the medicine (`scripts/build_freetext_benchmark.py`). Run with `scripts/run_freetext_eval.py --split dev|test`.
+
+| Metric (Qwen3-8B Q4, judge = same model) | dev (58) | test (62) |
+|---|---|---|
+| Answered | 100% | 100% |
+| Gold section in retrieved context | 93.1% | 93.5% |
+| Judge: correct | 82.8% | 82.3% (95% CI 71-90%) |
+| Judge: correct or partial | 86.2% | 91.9% |
+| Judge: every claim supported by cited passages | 98.3% | 96.8% |
+| Negative control (shuffled answers judged correct) | 1.7% | 0.0% |
+
+Caveats: the judge and the generator are the same model; the negative control only shows the judge rejects unrelated answers, not that it is unbiased. A manual review of the 8 dev "incorrect" verdicts found 3 judge false negatives, 3 underspecified questions or poor reference excerpts (for example "which adverse reaction" has many valid answers), and 2 real model errors, so the true accuracy is probably higher than 82%. Confidence intervals are wide at n=62. The first dev run (before the fix below) answered only 90%: six questions were refused with "select the presentation" although every candidate was the same product under several registrations; the resolver now picks the canonical registration for document questions and still asks when the question depends on the registration (marketing status, pack, national code).
+
+### ATC classifier: calibration and input ablation
+
+The classifier was badly overconfident: on the held-out split (7,996 rows, 13 of 14 classes present) it averaged 98.2% confidence at 79.3% accuracy. A single temperature (T = 2.37, fitted on the validation split) brings the expected calibration error from 0.189 to 0.061 and the negative log-likelihood from 1.74 to 0.91, without changing any prediction (`scripts/calibrate_atc.py`, `space/calibration.json`, one seed). Accuracy also depends on how much of the training format the user supplies (2,518 distinct held-out texts, `scripts/eval_atc_inputs.py`):
+
+| Input | Top-1 |
+|---|---|
+| Full record (name, dose, form, ingredients, route) | 78.8% |
+| Name + form + ingredient | 72.2% |
+| Name + ingredient | 73.2% |
+| Ingredient only | 68.2% |
+| Name only | 55.1% |
+
+## Public demo
+
+![La botica: ATC classifier drawers, word highlights and an agent receipt](docs/img/la-botica.png)
+
+Live: **https://huggingface.co/spaces/hsilvosa/la-botica** (English by default, Spanish switch). Free Hugging Face Spaces only host static sites, so the demo is a static page (`static-space/`) and the classifier runs in the visitor's browser: the model is exported to ONNX and quantised to int8 (110 MB) with `scripts/export_atc_onnx.py` and run with Transformers.js, with no server and no data leaving the page. On 600 held-out rows the int8 model agrees with the PyTorch model on 98.2% of predictions (top-1 79.5% vs 78.8%, calibration error 0.061 vs 0.062 with the same temperature; `eval/atc_onnx_parity.json`). The first visit downloads the model (about 30 s on a typical connection); the result appears within a second and the word highlights a few seconds later.
+
+While the model downloads, a progress bar shows the megabytes received and the page stays usable. A list of 2,956 CIMA active ingredients (most common first, searchable, filterable by ATC group) lets a visitor try the classifier without knowing any drug: after a pick, the page shows the group CIMA really files it under and whether the classifier never trained on that ingredient (a fair test) or did (not a fair test). A bilingual glossary explains ATC, active ingredient, calibration and the agent's stamps. The list is built by `scripts/build_space_assets.py`.
+
+The page shows a pharmacy cabinet with 14 drawers (the ATC groups) with calibrated probabilities, word-occlusion highlights and the closest CIMA medicines, next to "receipts" of nine real agent runs recorded by `scripts/build_space_gallery.py` (steps, timings, verbatim quotes, refusals), because the agent needs a GPU. Data files are rebuilt with `scripts/build_space_assets.py`; the model file is not stored in this repository (see `.gitignore`).
+
+`space/` is an alternative Gradio version of the same demo that runs the PyTorch model on a server (`python space/app.py`, set `ATC_MODEL` to `models/atc_classifier/hf_export` to skip the Hub download). Hosting Gradio Spaces now requires a paid Hugging Face plan, so it is not deployed.
+
+## Case study
+
+A discovery-to-handover write-up of this system as a client engagement: [docs/CASE_STUDY.md](docs/CASE_STUDY.md).
+
+## What the evaluations found
+
+Eight places where a first result looked good and was not (a 99.9% accuracy that was leakage, a 98% confidence at 79% accuracy, safety rules that did not generalise, a refusal that was a bug, and more): [docs/FINDINGS.md](docs/FINDINGS.md).
+
+## Agent
+
+`src/agent/` is a bounded tool-using agent on top of the grounded RAG (`POST /agent/run`, `python scripts/run_agent_eval.py`).
+
+- Tools: `search_medications` (navigation only), `query_evidence` (citable AEMPS passages), `classify_atc` (hypothesis, confidence withheld).
+- Limits: 5 steps, 5 tool calls, 90 s deadline, one identical call at most, JSONL trace per step (tool, args, latency, tokens).
+- Guardrails: personal-advice and prompt-injection requests are refused before any model call; the final answer is rendered from exact quotes of registered evidence, so invented citation ids and non-AEMPS URLs are rejected; a guessed registration number after an ambiguous search becomes `needs_disambiguation`.
+- Evaluation: 36 trajectory cases (`eval/agent_cases.jsonl`) checking status, tool use, step count, source relevance and expected values. Latest run with Qwen3-8B Q4 (`eval/agent_baseline.json`): 33/36 passed, median 12.5 s and p95 35 s per question, 2.4 steps on average. The three failures: one leaflet question hit the 90 s budget (long generation in the RAG), and two cases cite a correct medicine but a different section than the benchmark keywords. The rules were tuned on these same cases, so this is a development result, not a held-out one.
+
+### Request guards
+
+Personal-advice and prompt-injection requests are refused before any tool call by two layers: feature rules (a first-person or caregiver marker together with an advice marker) and a zero-shot intent classifier on the same local model (`src/agent/intent.py`). Measured with `scripts/eval_guard.py` on labelled red-team sets in `eval/`:
+
+| Set | Rules only | Rules + model |
+|---|---|---|
+| Development (39 unsafe, 25 safe) | 39/39 blocked, 25/25 allowed | 39/39, 25/25 |
+| Held-out, written after the rules were fixed (32 unsafe, 30 safe) | 13/32 blocked, 29/30 allowed | 32/32, 30/30 |
+
+The first version of the rules, which looked fine on the development set, blocked only 12 of 39 on it before it was rewritten; the held-out number shows the rewritten rules still do not generalise, which is why the model layer exists. One held-out safe question (a pack-size catalogue query) was refused by the rules and fixed afterwards, so that last 30/30 is not a clean held-out figure. Sets are small (64 and 62 items): 32/32 still only supports a lower bound of about 89% at 95% confidence. The agent evaluation is unchanged at 33/36 with the layer on (`eval/agent_with_intent_guard.json`); that run is not comparable on latency (other work ran on the machine). A router outage does not block answers; the rules still apply.
+
+## Serving and observability
+
+Measured on an RTX 3060 12 GB with llama.cpp (`llama-server`) serving Qwen3-8B Q4_K_M (`scripts/loadtest_llm.py`, `scripts/sweep_llama_server.py`, raw results in `eval/serving_llamacpp.json`). Each request has a unique prompt of 1,269 tokens (no prefix cache) and generates exactly 128 tokens; 12 requests per concurrency level, closed loop, no errors in any run. TTFT is time to first token; "tok/s per request" is decode speed.
+
+| Configuration | Concurrency | TTFT p50 (s) | Latency p95 (s) | tok/s per request | Aggregate tok/s | VRAM (MiB) |
+|---|---|---|---|---|---|---|
+| 1 slot, flash attention off | 1 | 3.61 | 8.14 | 44.3 | 19.3 | 7,497 |
+| 1 slot, flash attention off | 4 | 21.9 | 25.5 | 43.5 | 20.4 | 7,783 |
+| 1 slot, flash attention on | 1 | 0.87 | 3.66 | 46.2 | 35.4 | 7,414 |
+| 1 slot, flash attention on | 4 | 11.7 | 14.5 | 46.2 | 35.4 | 7,472 |
+| 4 slots, flash attention on | 1 | 0.87 | 3.69 | 46.2 | 35.3 | 8,629 |
+| 4 slots, flash attention on | 4 | 2.69 | 9.92 | 21.1 | 60.2 | 8,656 |
+| 4 slots, flash attention + KV cache q8_0 | 1 | 0.90 | 5.73 | 44.4 | 32.7 | 7,537 |
+| 4 slots, flash attention + KV cache q8_0 | 4 | 2.71 | 10.2 | 20.4 | 58.7 | 7,557 |
+
+- Flash attention cuts prompt processing about 4x (TTFT 3.6 s to 0.87 s) and raises single-slot throughput by 83%. The "off" row is a forced setting; the server default (`-fa auto`) is probably already on for this GPU, so it is not the configuration used before.
+- Several slots raise aggregate throughput by about 70% (35 to 60 tok/s) and cut TTFT at concurrency 4 from 11.7 s to 2.7 s. Each request then decodes slower (46 to 20 tok/s) because they share the GPU, and it saturates at 4 slots.
+- A q8_0 KV cache saves about 1.1 GB of VRAM at no measurable speed cost. Its effect on answer quality was not measured separately; the agent evaluation below is the only check.
+- Agent evaluation (36 cases, one client): same 33/36 cases passed with `--parallel 2 --ctx-size 16384 -fa on -ctk q8_0 -ctv q8_0` as before; median latency 12.5 s to 10.2 s, whole run 573 s to 480 s, p95 unchanged (36 s, the long-generation tail) (`eval/serving_agent_before_after.json`).
+- With the agent API loaded next to the LLM (embedding model, reranker and the 8B model), the card is at about 11.7 of 12 GB. In a manual test of the full stack, latency per question varied from 13 to 44 s, against a 10 s median in the isolated evaluation run. I did not isolate the cause; memory pressure is the main suspect. Treat 12 GB as the minimum for this stack.
+
+Run it:
+
+```bash
+llama-server -m models/qwen3/Qwen3-8B-Q4_K_M.gguf --port 8080 --jinja --metrics   --parallel 2 --ctx-size 16384 -fa on -ctk q8_0 -ctv q8_0 --n-gpu-layers 99
+CIMA_RAG_INDEX_DIR=indexes/cima-bge python scripts/serve_agent.py --port 8000   # loads models at startup (~50 s)
+docker compose -f deploy/docker-compose.yml up -d    # Prometheus :9090, Grafana :3000 (local only)
+```
+
+The agent API exposes Prometheus metrics on `/metrics` (runs by status and termination reason, run, model and tool latency histograms, steps per run, tokens, tool errors) and Prometheus also scrapes llama-server's own `/metrics`. Grafana provisions the dashboard "Pharma assistant: agent and LLM serving" (`deploy/grafana/dashboards`, generated by `scripts/build_grafana_dashboard.py`). The whole stack was run once end to end and both Prometheus targets were up; set `GRAFANA_ADMIN_PASSWORD` before using it for anything beyond a local demo. vLLM was not tested: it needs Linux (WSL2 or a GPU container) and a download of several GB.
+
 ## Next Steps
 
 - Extend the ATC classifier from level 1 to the full five-level hierarchy (levels 2–5 are already in `atc_dataset.parquet`), for example with one head per level or hierarchical decoding.

@@ -1,0 +1,298 @@
+{
+  "A_baseline_np1": {
+    "flags": [
+      "--parallel",
+      "1",
+      "--ctx-size",
+      "8192",
+      "-fa",
+      "off"
+    ],
+    "label": "A_baseline_np1",
+    "url": "http://127.0.0.1:8081/v1",
+    "prompt_tokens": 1500,
+    "max_tokens": 128,
+    "warmup_errors": 0,
+    "levels": [
+      {
+        "concurrency": 1,
+        "requests": 12,
+        "errors": 0,
+        "wall_s": 79.5,
+        "ttft_p50_s": 3.605,
+        "ttft_p95_s": 5.359,
+        "latency_p50_s": 6.48,
+        "latency_p95_s": 8.141,
+        "decode_tps_per_request": 44.3,
+        "throughput_tok_s": 19.3,
+        "prompt_tokens": 1269,
+        "gpu_mem_mib": 7497
+      },
+      {
+        "concurrency": 2,
+        "requests": 12,
+        "errors": 0,
+        "wall_s": 77.1,
+        "ttft_p50_s": 9.889,
+        "ttft_p95_s": 10.429,
+        "latency_p50_s": 12.779,
+        "latency_p95_s": 13.388,
+        "decode_tps_per_request": 43.9,
+        "throughput_tok_s": 19.9,
+        "prompt_tokens": 1269,
+        "gpu_mem_mib": 7804
+      },
+      {
+        "concurrency": 4,
+        "requests": 12,
+        "errors": 0,
+        "wall_s": 75.1,
+        "ttft_p50_s": 21.876,
+        "ttft_p95_s": 22.598,
+        "latency_p50_s": 24.788,
+        "latency_p95_s": 25.518,
+        "decode_tps_per_request": 43.5,
+        "throughput_tok_s": 20.4,
+        "prompt_tokens": 1269,
+        "gpu_mem_mib": 7783
+      },
+      {
+        "concurrency": 8,
+        "requests": 12,
+        "errors": 0,
+        "wall_s": 74.4,
+        "ttft_p50_s": 40.528,
+        "ttft_p95_s": 46.732,
+        "latency_p50_s": 43.44,
+        "latency_p95_s": 49.655,
+        "decode_tps_per_request": 43.6,
+        "throughput_tok_s": 20.6,
+        "prompt_tokens": 1269,
+        "gpu_mem_mib": 7766
+      }
+    ]
+  },
+  "B_flashattn_np1": {
+    "flags": [
+      "--parallel",
+      "1",
+      "--ctx-size",
+      "8192",
+      "-fa",
+      "on"
+    ],
+    "label": "B_flashattn_np1",
+    "url": "http://127.0.0.1:8081/v1",
+    "prompt_tokens": 1500,
+    "max_tokens": 128,
+    "warmup_errors": 0,
+    "levels": [
+      {
+        "concurrency": 1,
+        "requests": 12,
+        "errors": 0,
+        "wall_s": 43.4,
+        "ttft_p50_s": 0.867,
+        "ttft_p95_s": 0.908,
+        "latency_p50_s": 3.614,
+        "latency_p95_s": 3.659,
+        "decode_tps_per_request": 46.2,
+        "throughput_tok_s": 35.4,
+        "prompt_tokens": 1269,
+        "gpu_mem_mib": 7414
+      },
+      {
+        "concurrency": 2,
+        "requests": 12,
+        "errors": 0,
+        "wall_s": 43.3,
+        "ttft_p50_s": 4.467,
+        "ttft_p95_s": 4.478,
+        "latency_p50_s": 7.206,
+        "latency_p95_s": 7.227,
+        "decode_tps_per_request": 46.3,
+        "throughput_tok_s": 35.5,
+        "prompt_tokens": 1269,
+        "gpu_mem_mib": 7409
+      },
+      {
+        "concurrency": 4,
+        "requests": 12,
+        "errors": 0,
+        "wall_s": 43.4,
+        "ttft_p50_s": 11.685,
+        "ttft_p95_s": 11.747,
+        "latency_p50_s": 14.434,
+        "latency_p95_s": 14.501,
+        "decode_tps_per_request": 46.2,
+        "throughput_tok_s": 35.4,
+        "prompt_tokens": 1269,
+        "gpu_mem_mib": 7472
+      },
+      {
+        "concurrency": 8,
+        "requests": 12,
+        "errors": 0,
+        "wall_s": 43.5,
+        "ttft_p50_s": 22.596,
+        "ttft_p95_s": 26.233,
+        "latency_p50_s": 25.366,
+        "latency_p95_s": 28.985,
+        "decode_tps_per_request": 46.1,
+        "throughput_tok_s": 35.3,
+        "prompt_tokens": 1269,
+        "gpu_mem_mib": 7436
+      }
+    ]
+  },
+  "C_np4_fa": {
+    "flags": [
+      "--parallel",
+      "4",
+      "--ctx-size",
+      "16384",
+      "-fa",
+      "on"
+    ],
+    "label": "C_np4_fa",
+    "url": "http://127.0.0.1:8081/v1",
+    "prompt_tokens": 1500,
+    "max_tokens": 128,
+    "warmup_errors": 0,
+    "levels": [
+      {
+        "concurrency": 1,
+        "requests": 12,
+        "errors": 0,
+        "wall_s": 43.5,
+        "ttft_p50_s": 0.873,
+        "ttft_p95_s": 0.883,
+        "latency_p50_s": 3.614,
+        "latency_p95_s": 3.685,
+        "decode_tps_per_request": 46.2,
+        "throughput_tok_s": 35.3,
+        "prompt_tokens": 1269,
+        "gpu_mem_mib": 8629
+      },
+      {
+        "concurrency": 2,
+        "requests": 12,
+        "errors": 0,
+        "wall_s": 29.1,
+        "ttft_p50_s": 1.741,
+        "ttft_p95_s": 1.802,
+        "latency_p50_s": 4.851,
+        "latency_p95_s": 4.899,
+        "decode_tps_per_request": 39.1,
+        "throughput_tok_s": 52.7,
+        "prompt_tokens": 1269,
+        "gpu_mem_mib": 8652
+      },
+      {
+        "concurrency": 4,
+        "requests": 12,
+        "errors": 0,
+        "wall_s": 25.5,
+        "ttft_p50_s": 2.688,
+        "ttft_p95_s": 3.568,
+        "latency_p50_s": 8.457,
+        "latency_p95_s": 9.915,
+        "decode_tps_per_request": 21.1,
+        "throughput_tok_s": 60.2,
+        "prompt_tokens": 1269,
+        "gpu_mem_mib": 8656
+      },
+      {
+        "concurrency": 8,
+        "requests": 12,
+        "errors": 0,
+        "wall_s": 25.8,
+        "ttft_p50_s": 9.414,
+        "ttft_p95_s": 12.426,
+        "latency_p50_s": 16.113,
+        "latency_p95_s": 19.098,
+        "decode_tps_per_request": 19.3,
+        "throughput_tok_s": 59.5,
+        "prompt_tokens": 1269,
+        "gpu_mem_mib": 8645
+      }
+    ]
+  },
+  "D_np4_fa_kvq8": {
+    "flags": [
+      "--parallel",
+      "4",
+      "--ctx-size",
+      "16384",
+      "-fa",
+      "on",
+      "-ctk",
+      "q8_0",
+      "-ctv",
+      "q8_0"
+    ],
+    "label": "D_np4_fa_kvq8",
+    "url": "http://127.0.0.1:8081/v1",
+    "prompt_tokens": 1500,
+    "max_tokens": 128,
+    "warmup_errors": 0,
+    "levels": [
+      {
+        "concurrency": 1,
+        "requests": 12,
+        "errors": 0,
+        "wall_s": 47.0,
+        "ttft_p50_s": 0.895,
+        "ttft_p95_s": 2.818,
+        "latency_p50_s": 3.753,
+        "latency_p95_s": 5.725,
+        "decode_tps_per_request": 44.4,
+        "throughput_tok_s": 32.7,
+        "prompt_tokens": 1269,
+        "gpu_mem_mib": 7537
+      },
+      {
+        "concurrency": 2,
+        "requests": 12,
+        "errors": 0,
+        "wall_s": 29.4,
+        "ttft_p50_s": 1.763,
+        "ttft_p95_s": 1.803,
+        "latency_p50_s": 4.906,
+        "latency_p95_s": 4.945,
+        "decode_tps_per_request": 38.6,
+        "throughput_tok_s": 52.2,
+        "prompt_tokens": 1269,
+        "gpu_mem_mib": 7582
+      },
+      {
+        "concurrency": 4,
+        "requests": 12,
+        "errors": 0,
+        "wall_s": 26.2,
+        "ttft_p50_s": 2.705,
+        "ttft_p95_s": 3.603,
+        "latency_p50_s": 8.729,
+        "latency_p95_s": 10.167,
+        "decode_tps_per_request": 20.4,
+        "throughput_tok_s": 58.7,
+        "prompt_tokens": 1269,
+        "gpu_mem_mib": 7557
+      },
+      {
+        "concurrency": 8,
+        "requests": 12,
+        "errors": 0,
+        "wall_s": 25.9,
+        "ttft_p50_s": 9.471,
+        "ttft_p95_s": 12.396,
+        "latency_p50_s": 16.265,
+        "latency_p95_s": 19.134,
+        "decode_tps_per_request": 19.1,
+        "throughput_tok_s": 59.2,
+        "prompt_tokens": 1269,
+        "gpu_mem_mib": 7544
+      }
+    ]
+  }
+}

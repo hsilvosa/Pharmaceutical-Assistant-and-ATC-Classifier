@@ -1,0 +1,506 @@
+{
+  "judge_and_generator": "Qwen3-8B-Q4_K_M (same model; negative control reported)",
+  "date": "2026-10-21",
+  "protocol": "Rules tuned on dev (v1->v2). Test split run once after the last code change.",
+  "dev_v1_before_resolver_fix": {
+    "items": 58,
+    "errors": 0,
+    "answered": {
+      "k": 52,
+      "n": 58,
+      "rate": 0.897,
+      "ci95": [
+        0.792,
+        0.952
+      ]
+    },
+    "gold_chunk_in_context": {
+      "k": 50,
+      "n": 58,
+      "rate": 0.862,
+      "ci95": [
+        0.751,
+        0.928
+      ]
+    },
+    "gold_section_in_context": {
+      "k": 51,
+      "n": 58,
+      "rate": 0.879,
+      "ci95": [
+        0.771,
+        0.94
+      ]
+    },
+    "gold_chunk_cited": {
+      "k": 39,
+      "n": 58,
+      "rate": 0.672,
+      "ci95": [
+        0.544,
+        0.779
+      ]
+    },
+    "mean_reference_recall": 0.617,
+    "mrr_chunk": 0.698,
+    "judge_correct": {
+      "k": 43,
+      "n": 52,
+      "rate": 0.827,
+      "ci95": [
+        0.703,
+        0.906
+      ]
+    },
+    "judge_correct_or_partial": {
+      "k": 45,
+      "n": 52,
+      "rate": 0.865,
+      "ci95": [
+        0.747,
+        0.933
+      ]
+    },
+    "judge_verdicts": {
+      "correct": 43,
+      "partial": 2,
+      "incorrect": 7
+    },
+    "judge_faithful": {
+      "k": 51,
+      "n": 52,
+      "rate": 0.981,
+      "ci95": [
+        0.899,
+        0.997
+      ]
+    },
+    "negative_control_false_positive": {
+      "k": 0,
+      "n": 52,
+      "rate": 0.0,
+      "ci95": [
+        0.0,
+        0.069
+      ]
+    },
+    "by_category": {
+      "ft_4.1": {
+        "n": 6,
+        "gold_section_in_context": 1.0,
+        "judge_correct": 1.0
+      },
+      "ft_4.2": {
+        "n": 3,
+        "gold_section_in_context": 1.0,
+        "judge_correct": 0.67
+      },
+      "ft_4.3": {
+        "n": 4,
+        "gold_section_in_context": 1.0,
+        "judge_correct": 1.0
+      },
+      "ft_4.4": {
+        "n": 4,
+        "gold_section_in_context": 1.0,
+        "judge_correct": 0.75
+      },
+      "ft_4.5": {
+        "n": 5,
+        "gold_section_in_context": 1.0,
+        "judge_correct": 1.0
+      },
+      "ft_4.6": {
+        "n": 4,
+        "gold_section_in_context": 0.75,
+        "judge_correct": 1.0
+      },
+      "ft_4.8": {
+        "n": 4,
+        "gold_section_in_context": 0.75,
+        "judge_correct": 0.25
+      },
+      "ft_4.9": {
+        "n": 3,
+        "gold_section_in_context": 1.0,
+        "judge_correct": 0.33
+      },
+      "ft_5.1": {
+        "n": 2,
+        "gold_section_in_context": 1.0,
+        "judge_correct": 1.0
+      },
+      "ft_5.2": {
+        "n": 2,
+        "gold_section_in_context": 1.0,
+        "judge_correct": 0.0
+      },
+      "ft_6.4": {
+        "n": 3,
+        "gold_section_in_context": 0.33,
+        "judge_correct": 0.33
+      },
+      "leaflet_1": {
+        "n": 3,
+        "gold_section_in_context": 0.67,
+        "judge_correct": 0.33
+      },
+      "leaflet_2": {
+        "n": 3,
+        "gold_section_in_context": 1.0,
+        "judge_correct": 1.0
+      },
+      "leaflet_3": {
+        "n": 2,
+        "gold_section_in_context": 1.0,
+        "judge_correct": 1.0
+      },
+      "leaflet_4": {
+        "n": 5,
+        "gold_section_in_context": 0.8,
+        "judge_correct": 0.8
+      },
+      "leaflet_5": {
+        "n": 5,
+        "gold_section_in_context": 0.8,
+        "judge_correct": 0.8
+      }
+    }
+  },
+  "dev": {
+    "items": 58,
+    "errors": 0,
+    "answered": {
+      "k": 58,
+      "n": 58,
+      "rate": 1.0,
+      "ci95": [
+        0.938,
+        1.0
+      ]
+    },
+    "gold_chunk_in_context": {
+      "k": 53,
+      "n": 58,
+      "rate": 0.914,
+      "ci95": [
+        0.814,
+        0.963
+      ]
+    },
+    "gold_section_in_context": {
+      "k": 54,
+      "n": 58,
+      "rate": 0.931,
+      "ci95": [
+        0.836,
+        0.973
+      ]
+    },
+    "gold_chunk_cited": {
+      "k": 40,
+      "n": 58,
+      "rate": 0.69,
+      "ci95": [
+        0.562,
+        0.794
+      ]
+    },
+    "mean_reference_recall": 0.607,
+    "mrr_chunk": 0.733,
+    "judge_correct": {
+      "k": 48,
+      "n": 58,
+      "rate": 0.828,
+      "ci95": [
+        0.711,
+        0.904
+      ]
+    },
+    "judge_correct_or_partial": {
+      "k": 50,
+      "n": 58,
+      "rate": 0.862,
+      "ci95": [
+        0.751,
+        0.928
+      ]
+    },
+    "judge_verdicts": {
+      "correct": 48,
+      "partial": 2,
+      "incorrect": 8
+    },
+    "judge_faithful": {
+      "k": 57,
+      "n": 58,
+      "rate": 0.983,
+      "ci95": [
+        0.909,
+        0.997
+      ]
+    },
+    "negative_control_false_positive": {
+      "k": 1,
+      "n": 58,
+      "rate": 0.017,
+      "ci95": [
+        0.003,
+        0.091
+      ]
+    },
+    "by_category": {
+      "ft_4.1": {
+        "n": 6,
+        "gold_section_in_context": 1.0,
+        "judge_correct": 1.0
+      },
+      "ft_4.2": {
+        "n": 3,
+        "gold_section_in_context": 1.0,
+        "judge_correct": 0.67
+      },
+      "ft_4.3": {
+        "n": 4,
+        "gold_section_in_context": 1.0,
+        "judge_correct": 1.0
+      },
+      "ft_4.4": {
+        "n": 4,
+        "gold_section_in_context": 1.0,
+        "judge_correct": 0.75
+      },
+      "ft_4.5": {
+        "n": 5,
+        "gold_section_in_context": 1.0,
+        "judge_correct": 1.0
+      },
+      "ft_4.6": {
+        "n": 4,
+        "gold_section_in_context": 0.75,
+        "judge_correct": 1.0
+      },
+      "ft_4.8": {
+        "n": 4,
+        "gold_section_in_context": 1.0,
+        "judge_correct": 0.25
+      },
+      "ft_4.9": {
+        "n": 3,
+        "gold_section_in_context": 1.0,
+        "judge_correct": 0.33
+      },
+      "ft_5.1": {
+        "n": 2,
+        "gold_section_in_context": 1.0,
+        "judge_correct": 1.0
+      },
+      "ft_5.2": {
+        "n": 2,
+        "gold_section_in_context": 1.0,
+        "judge_correct": 0.0
+      },
+      "ft_6.4": {
+        "n": 3,
+        "gold_section_in_context": 0.33,
+        "judge_correct": 1.0
+      },
+      "leaflet_1": {
+        "n": 3,
+        "gold_section_in_context": 1.0,
+        "judge_correct": 0.67
+      },
+      "leaflet_2": {
+        "n": 3,
+        "gold_section_in_context": 1.0,
+        "judge_correct": 1.0
+      },
+      "leaflet_3": {
+        "n": 2,
+        "gold_section_in_context": 1.0,
+        "judge_correct": 1.0
+      },
+      "leaflet_4": {
+        "n": 5,
+        "gold_section_in_context": 0.8,
+        "judge_correct": 1.0
+      },
+      "leaflet_5": {
+        "n": 5,
+        "gold_section_in_context": 1.0,
+        "judge_correct": 1.0
+      }
+    }
+  },
+  "test": {
+    "items": 62,
+    "errors": 0,
+    "answered": {
+      "k": 62,
+      "n": 62,
+      "rate": 1.0,
+      "ci95": [
+        0.942,
+        1.0
+      ]
+    },
+    "gold_chunk_in_context": {
+      "k": 57,
+      "n": 62,
+      "rate": 0.919,
+      "ci95": [
+        0.825,
+        0.965
+      ]
+    },
+    "gold_section_in_context": {
+      "k": 58,
+      "n": 62,
+      "rate": 0.935,
+      "ci95": [
+        0.846,
+        0.975
+      ]
+    },
+    "gold_chunk_cited": {
+      "k": 46,
+      "n": 62,
+      "rate": 0.742,
+      "ci95": [
+        0.621,
+        0.834
+      ]
+    },
+    "mean_reference_recall": 0.681,
+    "mrr_chunk": 0.772,
+    "judge_correct": {
+      "k": 51,
+      "n": 62,
+      "rate": 0.823,
+      "ci95": [
+        0.71,
+        0.898
+      ]
+    },
+    "judge_correct_or_partial": {
+      "k": 57,
+      "n": 62,
+      "rate": 0.919,
+      "ci95": [
+        0.825,
+        0.965
+      ]
+    },
+    "judge_verdicts": {
+      "correct": 51,
+      "partial": 6,
+      "incorrect": 5
+    },
+    "judge_faithful": {
+      "k": 60,
+      "n": 62,
+      "rate": 0.968,
+      "ci95": [
+        0.89,
+        0.991
+      ]
+    },
+    "negative_control_false_positive": {
+      "k": 0,
+      "n": 62,
+      "rate": 0.0,
+      "ci95": [
+        0.0,
+        0.058
+      ]
+    },
+    "by_category": {
+      "ft_4.1": {
+        "n": 3,
+        "gold_section_in_context": 1.0,
+        "judge_correct": 1.0
+      },
+      "ft_4.2": {
+        "n": 6,
+        "gold_section_in_context": 0.83,
+        "judge_correct": 0.67
+      },
+      "ft_4.3": {
+        "n": 4,
+        "gold_section_in_context": 1.0,
+        "judge_correct": 1.0
+      },
+      "ft_4.4": {
+        "n": 5,
+        "gold_section_in_context": 1.0,
+        "judge_correct": 0.6
+      },
+      "ft_4.5": {
+        "n": 4,
+        "gold_section_in_context": 1.0,
+        "judge_correct": 1.0
+      },
+      "ft_4.6": {
+        "n": 4,
+        "gold_section_in_context": 1.0,
+        "judge_correct": 1.0
+      },
+      "ft_4.8": {
+        "n": 4,
+        "gold_section_in_context": 1.0,
+        "judge_correct": 1.0
+      },
+      "ft_4.9": {
+        "n": 4,
+        "gold_section_in_context": 1.0,
+        "judge_correct": 1.0
+      },
+      "ft_5.1": {
+        "n": 3,
+        "gold_section_in_context": 0.67,
+        "judge_correct": 0.33
+      },
+      "ft_5.2": {
+        "n": 2,
+        "gold_section_in_context": 1.0,
+        "judge_correct": 1.0
+      },
+      "ft_6.4": {
+        "n": 5,
+        "gold_section_in_context": 1.0,
+        "judge_correct": 0.6
+      },
+      "leaflet_1": {
+        "n": 3,
+        "gold_section_in_context": 1.0,
+        "judge_correct": 0.67
+      },
+      "leaflet_2": {
+        "n": 4,
+        "gold_section_in_context": 1.0,
+        "judge_correct": 1.0
+      },
+      "leaflet_3": {
+        "n": 6,
+        "gold_section_in_context": 0.67,
+        "judge_correct": 0.83
+      },
+      "leaflet_4": {
+        "n": 2,
+        "gold_section_in_context": 1.0,
+        "judge_correct": 0.5
+      },
+      "leaflet_5": {
+        "n": 3,
+        "gold_section_in_context": 1.0,
+        "judge_correct": 1.0
+      }
+    }
+  },
+  "manual_review_dev_incorrect_verdicts": {
+    "n": 8,
+    "judge_false_negative": 3,
+    "underspecified_or_bad_reference": 3,
+    "model_error": 2
+  }
+}
