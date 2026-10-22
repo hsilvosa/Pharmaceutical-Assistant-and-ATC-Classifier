@@ -48,3 +48,15 @@ def test_static_space_ships_the_same_data_as_the_gradio_app_and_the_quantised_mo
     parity = json.loads(Path("eval/atc_onnx_parity.json").read_text(encoding="utf-8"))
     assert parity["int8"]["agreement_with_torch"] >= 0.97
     assert abs(parity["int8"]["ece_with_temperature"] - parity["torch"]["ece_with_temperature"]) < 0.02
+
+
+def test_static_space_catalog_is_well_formed_and_flags_unseen_ingredients():
+    rows = json.loads(Path("static-space/data/catalog.json").read_text(encoding="utf-8"))
+    assert len(rows) > 1000
+    for ingredients, name, form, code, unseen, presentations in rows:
+        assert ingredients and name and code[0].isalpha() and unseen in (0, 1) and presentations >= 1
+    assert len({r[0] for r in rows}) == len(rows)
+    share = sum(r[4] for r in rows) / len(rows)
+    assert 0.1 < share < 0.35  # validation and test partitions are about 20% of the ingredient sets
+    counts = [r[5] for r in rows]
+    assert counts == sorted(counts, reverse=True)  # most common first
