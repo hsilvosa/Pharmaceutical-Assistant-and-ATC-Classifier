@@ -59,9 +59,8 @@ def build_index(
             raise RuntimeError("Source ended before the persisted chunks were matched")
         print(f"verified {done} persisted chunks", file=sys.stderr, flush=True)
     resumed = done
-    calls = 0
     started = time.monotonic()
-    for batch in iter_batches(chunk_stream, call_size):
+    for calls, batch in enumerate(iter_batches(chunk_stream, call_size), start=1):
         vectors = np.asarray(
             embedder.encode([chunk.embedding_text for chunk in batch]), dtype=np.float32
         )
@@ -70,7 +69,6 @@ def build_index(
             checksum.update(chunk.chunk_id.encode("ascii"))
             checksum.update(vector.tobytes())
         done += len(batch)
-        calls += 1
         if calls % 20 == 0:
             rate = (done - resumed) / (time.monotonic() - started)
             print(f"embedded {done} chunks ({rate:.1f}/s)", file=sys.stderr, flush=True)
