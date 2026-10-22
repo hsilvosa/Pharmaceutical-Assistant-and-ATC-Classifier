@@ -37,6 +37,15 @@ def main() -> None:
     shutil.copy(ROOT / "eval" / "atc_input_ablation.json", out_dir / "atc_input_ablation.json")
     forms = df["form"].value_counts().head(30).index.tolist()
     (out_dir / "forms.json").write_text(json.dumps(forms, ensure_ascii=False), encoding="utf-8")
+    static = ROOT / "static-space" / "data"
+    static.mkdir(parents=True, exist_ok=True)
+    for name in ("calibration.json",):
+        shutil.copy(ROOT / "space" / name, static / name)
+    shutil.copy(ROOT / "space" / "gallery.json", static / "gallery.json")
+    shutil.copy(out_dir / "atc_input_ablation.json", static / "atc_input_ablation.json")
+    (static / "forms.json").write_text(json.dumps(forms, ensure_ascii=False), encoding="utf-8")
+    compact = df[["name", "atc_code", "ingredients"]].values.tolist()
+    (static / "neighbors.json").write_text(json.dumps(compact, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
     print(f"{len(df)} medicines -> {path} ({path.stat().st_size / 1e6:.1f} MB), top forms: {forms[:3]}", file=sys.stderr)
 
 

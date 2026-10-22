@@ -226,7 +226,11 @@ The classifier was badly overconfident: on the held-out split (7,996 rows, 13 of
 
 ## Public demo
 
-`space/` is a Gradio app (a pharmacy cabinet with 14 drawers for the ATC groups, and "receipts" of real agent runs), English by default with a Spanish switch. The classifier runs live on CPU with calibrated probabilities, word-occlusion highlights and the closest CIMA medicines; the agent tab is a static gallery of nine real runs recorded by `scripts/build_space_gallery.py` (steps, timings, verbatim quotes, refusals), because the agent needs a GPU. Run it locally with `python space/app.py` (set `ATC_MODEL` to `models/atc_classifier/hf_export` to skip the Hub download). It has not been published to Hugging Face yet. Data files are rebuilt with `scripts/build_space_assets.py`.
+Live: **https://huggingface.co/spaces/hsilvosa/la-botica** (English by default, Spanish switch). Free Hugging Face Spaces only host static sites, so the demo is a static page (`static-space/`) and the classifier runs in the visitor's browser: the model is exported to ONNX and quantised to int8 (110 MB) with `scripts/export_atc_onnx.py` and run with Transformers.js, with no server and no data leaving the page. On 600 held-out rows the int8 model agrees with the PyTorch model on 98.2% of predictions (top-1 79.5% vs 78.8%, calibration error 0.061 vs 0.062 with the same temperature; `eval/atc_onnx_parity.json`). The first visit downloads the model (about 30 s on a typical connection); the result appears within a second and the word highlights a few seconds later.
+
+The page shows a pharmacy cabinet with 14 drawers (the ATC groups) with calibrated probabilities, word-occlusion highlights and the closest CIMA medicines, next to "receipts" of nine real agent runs recorded by `scripts/build_space_gallery.py` (steps, timings, verbatim quotes, refusals), because the agent needs a GPU. Data files are rebuilt with `scripts/build_space_assets.py`; the model file is not stored in this repository (see `.gitignore`).
+
+`space/` is an alternative Gradio version of the same demo that runs the PyTorch model on a server (`python space/app.py`, set `ATC_MODEL` to `models/atc_classifier/hf_export` to skip the Hub download). Hosting Gradio Spaces now requires a paid Hugging Face plan, so it is not deployed.
 
 ## Case study
 
