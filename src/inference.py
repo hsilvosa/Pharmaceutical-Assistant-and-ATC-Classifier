@@ -322,6 +322,19 @@ class CIMAMedicalAssistantEngine:
             )
         )
 
+    def query_evidence_trace(
+        self,
+        question: str,
+        registration_number: str | None = None,
+        language: str = "auto",
+    ):
+        """Like query_evidence, but also return the retrieved hits with their full passage text."""
+        from src.rag.models import QueryRequest
+
+        return self._get_rag_service().query_with_trace(
+            QueryRequest(question=question, registration_number=registration_number, language=language)
+        )
+
     def _load_knowledge_base(self):
         if self.dataset_path.exists():
             self.df_meds = pd.read_parquet(self.dataset_path)
